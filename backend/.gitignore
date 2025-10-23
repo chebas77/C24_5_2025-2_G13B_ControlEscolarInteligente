@@ -1,0 +1,18 @@
+# Ignore environment files
+src/.env
+
+# Allow example env file
+!src/.env.example
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Django static files
+staticfiles/
+media/
+
+# OS files
+.DS_Store
+Thumbs.db
