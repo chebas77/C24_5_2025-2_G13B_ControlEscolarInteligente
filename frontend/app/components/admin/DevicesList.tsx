@@ -1,84 +1,60 @@
-import { useState } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { 
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "../ui/table";
-import { 
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import { 
   Monitor, 
   Plus, 
   Camera,
-  Edit,
-  Power,
   Circle
 } from "lucide-react";
 
-interface Device {
-  id: string;
-  code: string;
-  location: string;
-  status: 'online' | 'offline';
-  lastPing: string;
-  type: 'kiosko' | 'ipc';
-}
-
 interface DevicesListProps {
-  onOpenCapture: (deviceId: string) => void;
+  onOpenCapture?: (deviceId: string) => void;
 }
 
 export function DevicesList({ onOpenCapture }: DevicesListProps) {
-  const [devices] = useState<Device[]>([
-    {
-      id: '1',
-      code: 'KSK-001',
-      location: 'Pabellón A - Entrada Principal',
-      status: 'online',
-      lastPing: '2 min',
-      type: 'kiosko'
-    },
-    {
-      id: '2',
-      code: 'KSK-002',
-      location: 'Pabellón B - Secundaria Varones',
-      status: 'online',
-      lastPing: '1 min',
-      type: 'kiosko'
-    },
-    {
-      id: '3',
-      code: 'IPC-001',
-      location: 'Oficina Administrativa',
-      status: 'online',
-      lastPing: '5 min',
-      type: 'ipc'
-    },
-    {
-      id: '4',
-      code: 'KSK-003',
-      location: 'Pabellón C - Primaria',
-      status: 'offline',
-      lastPing: '45 min',
-      type: 'kiosko'
-    }
-  ]);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [permissionGranted, setPermissionGranted] = useState(false);
+  const router = useRouter();
 
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Detectar cámaras disponibles
+  useEffect(() => {
+    const getCameras = async () => {
+      try {
+        // Pedimos permiso para listar nombres de cámaras
+        await navigator.mediaDevices.getUserMedia({ video: true });
+        setPermissionGranted(true);
+
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(d => d.kind === "videoinput");
+        setVideoDevices(cameras);
+      } catch (error) {
+        console.error("Error accediendo a cámaras:", error);
+        setPermissionGranted(false);
+      }
+    };
+
+    getCameras();
+
+    // Listener para cambios dinámicos (por ejemplo, conectar nueva cámara)
+    navigator.mediaDevices.addEventListener("devicechange", getCameras);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", getCameras);
+  }, []);
+
+  const handleOpenCapture = (deviceId: string) => {
+    if (onOpenCapture) {
+      onOpenCapture(deviceId);
+    } else {
+      router.push(`/captura/${deviceId}`);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -86,106 +62,66 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
         <div>
           <h2 className="text-2xl text-gray-900">Puestos de Captura</h2>
           <p className="text-gray-600">
-            Gestión de dispositivos de reconocimiento facial
+            Cámaras detectadas en este equipo (interna, USB, IP, etc.)
           </p>
         </div>
-        <Button 
+        <Button
           className="bg-red-600 hover:bg-red-700"
-          onClick={() => setIsDialogOpen(true)}
+          onClick={() => window.location.reload()}
         >
           <Plus className="h-4 w-4 mr-2" />
-          Registrar Dispositivo
+          Actualizar Lista
         </Button>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Registrar Nuevo Dispositivo</DialogTitle>
-            <DialogDescription>
-              Configure un nuevo puesto de captura facial
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">Código del Dispositivo</Label>
-              <Input id="code" placeholder="KSK-004" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location">Ubicación</Label>
-              <Input id="location" placeholder="Pabellón D - Ingreso" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="type">Tipo de Dispositivo</Label>
-              <select 
-                id="type" 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              >
-                <option value="kiosko">Kiosko</option>
-                <option value="ipc">IPC</option>
-              </select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button className="bg-red-600 hover:bg-red-700" onClick={() => setIsDialogOpen(false)}>
-              Registrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Total Dispositivos</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm">Total de Cámaras</CardTitle>
             <Monitor className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl">{devices.length}</div>
-            <p className="text-xs text-muted-foreground">dispositivos registrados</p>
+            <div className="text-2xl">{videoDevices.length}</div>
+            <p className="text-xs text-muted-foreground">dispositivos disponibles</p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">En Línea</CardTitle>
-            <Circle className="h-4 w-4 text-green-600 fill-green-600" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm">Permisos</CardTitle>
+            <Circle
+              className={`h-4 w-4 ${
+                permissionGranted
+                  ? "text-green-600 fill-green-600"
+                  : "text-red-600 fill-red-600"
+              }`}
+            />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-green-600">
-              {devices.filter(d => d.status === 'online').length}
+            <div
+              className={`text-2xl ${
+                permissionGranted ? "text-green-600" : "text-red-600"
+              }`}
+            >
+              {permissionGranted ? "Otorgados" : "Denegados"}
             </div>
-            <p className="text-xs text-muted-foreground">activos ahora</p>
+            <p className="text-xs text-muted-foreground">
+              acceso a cámara {permissionGranted ? "activo" : "bloqueado"}
+            </p>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Fuera de Línea</CardTitle>
-            <Circle className="h-4 w-4 text-red-600 fill-red-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl text-red-600">
-              {devices.filter(d => d.status === 'offline').length}
-            </div>
-            <p className="text-xs text-muted-foreground">requieren atención</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm">Kioscos</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm">Tipo de Entradas</CardTitle>
             <Camera className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl">
-              {devices.filter(d => d.type === 'kiosko').length}
+              {new Set(videoDevices.map((d) => d.groupId)).size}
             </div>
-            <p className="text-xs text-muted-foreground">puestos principales</p>
+            <p className="text-xs text-muted-foreground">grupos de cámara detectados</p>
           </CardContent>
         </Card>
       </div>
@@ -193,82 +129,51 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
       {/* Devices Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Lista de Dispositivos</CardTitle>
+          <CardTitle>Lista de Cámaras</CardTitle>
           <CardDescription>
-            Género: Varones • Todos los pabellones
+            Selecciona una cámara para abrir su vista de captura.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Código</TableHead>
-                <TableHead>Ubicación</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Último Ping</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {devices.map((device) => (
-                <TableRow key={device.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Monitor className="h-4 w-4 text-gray-500" />
-                      <span>{device.code}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>{device.location}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {device.type === 'kiosko' ? 'Kiosko' : 'IPC'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Circle 
-                        className={`h-2 w-2 ${
-                          device.status === 'online' 
-                            ? 'text-green-600 fill-green-600' 
-                            : 'text-red-600 fill-red-600'
-                        }`} 
-                      />
-                      <span className={
-                        device.status === 'online' 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }>
-                        {device.status === 'online' ? 'En línea' : 'Fuera de línea'}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-gray-600">
-                    Hace {device.lastPing}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button 
-                        size="sm" 
+          {videoDevices.length === 0 ? (
+            <div className="text-gray-500 text-sm">
+              {permissionGranted
+                ? "No se detectaron cámaras conectadas."
+                : "Debes otorgar permiso para acceder a la cámara."}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>#</TableHead>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Device ID</TableHead>
+                  <TableHead className="text-right">Acción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {videoDevices.map((device, index) => (
+                  <TableRow key={device.deviceId}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell>{device.label || `Cámara ${index + 1}`}</TableCell>
+                    <TableCell className="truncate max-w-[200px] text-gray-500">
+                      {device.deviceId}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
                         variant="outline"
-                        disabled={device.status === 'offline'}
-                        onClick={() => onOpenCapture(device.code)}
+                        onClick={() => handleOpenCapture(device.deviceId)}
                       >
                         <Camera className="h-3 w-3 mr-1" />
                         Abrir Puesto
                       </Button>
-                      <Button size="sm" variant="ghost">
-                        <Edit className="h-3 w-3" />
-                      </Button>
-                      <Button size="sm" variant="ghost">
-                        <Power className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
