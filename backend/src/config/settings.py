@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'devices',
     'reports',
     'config_app',
+    "api.procesamiento",
 ]
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

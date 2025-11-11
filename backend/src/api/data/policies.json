@@ -1,0 +1,22 @@
+{
+  "id": "default",
+  "institution": "Fe y Alegría N° 39",
+  "threshold": 75,
+  "requireLiveness": true,
+  "retentionDays": 90,
+  "autoBackup": true,
+  "backupFrequency": "weekly",
+  "privacy": {
+    "lawCompliance": [
+      "Ley N° 29733 - Protección de Datos Personales",
+      "Políticas internas de privacidad institucional",
+      "Consentimiento informado de padres de familia"
+    ],
+    "biometricProcessing": "local",
+    "dataStored": "vectores matemáticos (no imágenes completas)"
+  },
+  "metadata": {
+    "lastUpdated": "2024-01-15",
+    "updatedBy": "Administrador"
+  }
+}

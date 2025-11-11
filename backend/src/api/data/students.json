@@ -1,0 +1,131 @@
+[
+  {
+    "id": "1",
+    "name": "García Pérez, Juan Carlos",
+    "code": "EST-2024-001",
+    "grade": "5to",
+    "section": "A",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-15",
+    "faceTemplates": [
+      { "url": "/faces/juan_1.jpg", "validated": true },
+      { "url": "/faces/juan_2.jpg", "validated": true },
+      { "url": "/faces/juan_3.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "2",
+    "name": "Rodríguez Silva, Miguel Ángel",
+    "code": "EST-2024-002",
+    "grade": "5to",
+    "section": "A",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-15",
+    "faceTemplates": [
+      { "url": "/faces/miguel_1.jpg", "validated": true },
+      { "url": "/faces/miguel_2.jpg", "validated": true },
+      { "url": "/faces/miguel_3.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "3",
+    "name": "López Martínez, Carlos Eduardo",
+    "code": "EST-2024-003",
+    "grade": "4to",
+    "section": "B",
+    "templateStatus": "incomplete",
+    "lastUpdate": "2024-01-10",
+    "faceTemplates": [
+      { "url": "/faces/carlos_1.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "4",
+    "name": "Fernández Vega, José Luis",
+    "code": "EST-2024-004",
+    "grade": "3ro",
+    "section": "A",
+    "templateStatus": "pending",
+    "lastUpdate": null,
+    "faceTemplates": []
+  },
+  {
+    "id": "5",
+    "name": "Torres Ramírez, María Isabel",
+    "code": "EST-2024-005",
+    "grade": "5to",
+    "section": "A",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-18",
+    "faceTemplates": [
+      { "url": "/faces/maria_1.jpg", "validated": true },
+      { "url": "/faces/maria_2.jpg", "validated": true },
+      { "url": "/faces/maria_3.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "6",
+    "name": "Sánchez Díaz, Ana Lucía",
+    "code": "EST-2024-006",
+    "grade": "4to",
+    "section": "B",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-16",
+    "faceTemplates": [
+      { "url": "/faces/ana_1.jpg", "validated": true },
+      { "url": "/faces/ana_2.jpg", "validated": true },
+      { "url": "/faces/ana_3.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "7",
+    "name": "Morales Castro, Pedro Antonio",
+    "code": "EST-2024-007",
+    "grade": "3ro",
+    "section": "A",
+    "templateStatus": "incomplete",
+    "lastUpdate": "2024-01-12",
+    "faceTemplates": [
+      { "url": "/faces/pedro_1.jpg", "validated": true },
+      { "url": "/faces/pedro_2.jpg", "validated": false }
+    ]
+  },
+  {
+    "id": "8",
+    "name": "Gutiérrez Flores, Sofía Elena",
+    "code": "EST-2024-008",
+    "grade": "5to",
+    "section": "A",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-19",
+    "faceTemplates": [
+      { "url": "/faces/sofia_1.jpg", "validated": true },
+      { "url": "/faces/sofia_2.jpg", "validated": true },
+      { "url": "/faces/sofia_3.jpg", "validated": true }
+    ]
+  },
+  {
+    "id": "9",
+    "name": "Vargas Mendoza, Luis Fernando",
+    "code": "EST-2024-009",
+    "grade": "4to",
+    "section": "B",
+    "templateStatus": "pending",
+    "lastUpdate": null,
+    "faceTemplates": []
+  },
+  {
+    "id": "10",
+    "name": "Herrera Campos, Carmen Rosa",
+    "code": "EST-2024-010",
+    "grade": "3ro",
+    "section": "A",
+    "templateStatus": "complete",
+    "lastUpdate": "2024-01-17",
+    "faceTemplates": [
+      { "url": "/faces/carmen_1.jpg", "validated": true },
+      { "url": "/faces/carmen_2.jpg", "validated": true },
+      { "url": "/faces/carmen_3.jpg", "validated": true }
+    ]
+  }
+]

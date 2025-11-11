@@ -1,0 +1,28 @@
+{
+  "summary": {
+    "totalDays": 5,
+    "avgAttendance": 90.8,
+    "avgLate": 8,
+    "avgAbsent": 5.4,
+    "trend": 2.3
+  },
+  "dailyReports": [
+    { "date": "2024-01-20", "present": 132, "late": 8, "absent": 5, "total": 145, "rate": 91.0 },
+    { "date": "2024-01-19", "present": 128, "late": 10, "absent": 7, "total": 145, "rate": 88.3 },
+    { "date": "2024-01-18", "present": 135, "late": 6, "absent": 4, "total": 145, "rate": 93.1 },
+    { "date": "2024-01-17", "present": 130, "late": 9, "absent": 6, "total": 145, "rate": 89.7 },
+    { "date": "2024-01-16", "present": 133, "late": 7, "absent": 5, "total": 145, "rate": 91.7 }
+  ],
+  "incidentReports": [
+    { "type": "Score bajo (<75%)", "count": 12, "trend": -3 },
+    { "type": "Liveness no detectado", "count": 8, "trend": -2 },
+    { "type": "Verificación manual requerida", "count": 5, "trend": 0 },
+    { "type": "Timeout de captura", "count": 3, "trend": -1 }
+  ],
+  "metadata": {
+    "period": "month",
+    "grade": "all",
+    "generatedAt": "2024-01-21T09:00:00Z",
+    "generatedBy": "Administrador"
+  }
+}

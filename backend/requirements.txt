@@ -9,7 +9,7 @@ channels_redis==4.3.0
 charset-normalizer==3.4.4
 click==8.3.0
 colorama==0.4.6
-deepface==0.0.82
+deepface==0.0.79
 dj-database-url==3.0.1
 Django==5.2.7
 djangorestframework==3.16.1
@@ -28,7 +28,7 @@ idna==3.11
 itsdangerous==2.2.0
 Jinja2==3.1.6
 joblib==1.5.2
-keras==3.10.0
+keras==3.12.0
 libclang==18.1.1
 lz4==4.4.5
 Markdown==3.10
@@ -59,8 +59,6 @@ redis==7.0.0
 requests==2.32.5
 retina-face==0.0.17
 rich==14.2.0
-scikit-learn==1.7.2
-scipy==1.16.3
 setuptools==80.9.0
 six==1.17.0
 soupsieve==2.8
@@ -70,8 +68,6 @@ tensorboard-data-server==0.7.2
 tensorflow==2.20.0
 tensorflow_cpu==2.20.0
 termcolor==3.2.0
-tf_keras==2.20.1
-threadpoolctl==3.6.0
 tqdm==4.67.1
 typing_extensions==4.15.0
 tzdata==2025.2

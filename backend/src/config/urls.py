@@ -20,4 +20,6 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/attendance/', include('attendance.urls')),
+    # 🔹 Incluye las rutas del procesamiento facial
+    path("api/procesamiento/", include("api.procesamiento.urls")),
 ]

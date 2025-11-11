@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ksk-001",
+    "name": "Puesto Principal - Entrada A",
+    "location": "Portón principal",
+    "status": "online",
+    "lastSync": "2024-01-21T09:15:00Z"
+  },
+  {
+    "id": "ksk-002",
+    "name": "Puesto Secundario - Biblioteca",
+    "location": "Zona norte",
+    "status": "offline",
+    "lastSync": "2024-01-20T16:45:00Z"
+  },
+  {
+    "id": "ksk-003",
+    "name": "Puesto Docentes",
+    "location": "Administración",
+    "status": "online",
+    "lastSync": "2024-01-21T09:10:00Z"
+  }
+]

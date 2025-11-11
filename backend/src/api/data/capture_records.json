@@ -1,0 +1,26 @@
+[
+  {
+    "id": "cap-1001",
+    "deviceId": "ksk-001",
+    "studentCode": "EST-2024-001",
+    "time": "2024-01-21T07:30:45Z",
+    "score": 92.5,
+    "result": "verified"
+  },
+  {
+    "id": "cap-1002",
+    "deviceId": "ksk-002",
+    "studentCode": "EST-2024-003",
+    "time": "2024-01-21T07:35:12Z",
+    "score": 77.3,
+    "result": "rejected"
+  },
+  {
+    "id": "cap-1003",
+    "deviceId": "ksk-001",
+    "studentCode": "EST-2024-005",
+    "time": "2024-01-21T07:39:56Z",
+    "score": 88.4,
+    "result": "verified"
+  }
+]
