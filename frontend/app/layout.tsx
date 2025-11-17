@@ -2,6 +2,20 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// 👇 *** IMPORTAR E INICIALIZAR TFJS Y BACKENDS SOLO UNA VEZ ***
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-cpu";
+
+// Inicializa el backend SOLO UNA VEZ cuando se carga el layout
+tf.ready().then(() => {
+  if (tf.getBackend() !== "webgl") {
+    tf.setBackend("webgl");
+  }
+  // Opcional: log para depuración
+  // console.log("TFJS backend inicializado:", tf.getBackend());
+});
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

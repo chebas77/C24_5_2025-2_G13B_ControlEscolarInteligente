@@ -24,29 +24,152 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
   const [permissionGranted, setPermissionGranted] = useState(false);
   const router = useRouter();
 
-  // Detectar cámaras disponibles
+  // Detectar cámaras disponibles con fallbacks (enumerateDevices, getUserMedia, legacy)
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const getCameras = async () => {
       try {
-        // Pedimos permiso para listar nombres de cámaras
-        await navigator.mediaDevices.getUserMedia({ video: true });
-        setPermissionGranted(true);
+        const nav: any = navigator;
+        const md = nav.mediaDevices;
 
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const cameras = devices.filter(d => d.kind === "videoinput");
-        setVideoDevices(cameras);
-      } catch (error) {
-        console.error("Error accediendo a cámaras:", error);
+        // Si no existe mediaDevices, intentar legacy getUserMedia
+        if (!md) {
+          const legacyGet = nav.getUserMedia || nav.webkitGetUserMedia || nav.mozGetUserMedia;
+          if (legacyGet) {
+            // solicitar permiso legacy y crear dispositivo sintético
+            const stream: MediaStream = await new Promise((resolve, reject) =>
+              legacyGet.call(nav, { video: true }, resolve, reject)
+            );
+            stream.getTracks().forEach((t) => t.stop());
+            setPermissionGranted(true);
+            setVideoDevices([
+              {
+                deviceId: "default",
+                kind: "videoinput",
+                label: "Cámara (predeterminada)",
+                groupId: "",
+              } as unknown as MediaDeviceInfo,
+            ]);
+            return;
+          } else {
+            console.error("mediaDevices no disponible en este entorno");
+            setVideoDevices([]);
+            setPermissionGranted(false);
+            return;
+          }
+        }
+
+        // Si existe enumerateDevices, usarla primero (no exige permiso en algunos navegadores)
+        if (typeof md.enumerateDevices === "function") {
+          const devices = await md.enumerateDevices();
+          const cameras = devices.filter((d: any) => d.kind === "videoinput");
+          if (cameras.length > 0) {
+            setVideoDevices(cameras);
+            // si hay labels es porque se ha otorgado permiso previamente
+            const hasLabels = cameras.some((c: any) => c.label && c.label.length > 0);
+            setPermissionGranted(Boolean(hasLabels));
+            return;
+          }
+        }
+
+        // Si no hay cámaras listadas, intentar solicitar permiso con getUserMedia
+        const getUserMediaFn =
+          md.getUserMedia ||
+          md.getUserMedia?.bind(md) ||
+          nav.getUserMedia ||
+          nav.webkitGetUserMedia ||
+          nav.mozGetUserMedia;
+
+        if (typeof md.getUserMedia === "function" || getUserMediaFn) {
+          // solicitar permiso
+          const stream =
+            typeof md.getUserMedia === "function"
+              ? await md.getUserMedia({ video: true })
+              : await new Promise<MediaStream>((resolve, reject) =>
+                  getUserMediaFn.call(nav, { video: true }, resolve, reject)
+                );
+
+          setPermissionGranted(true);
+
+          // detener tracks y volver a enumerar si es posible
+          stream.getTracks().forEach((t) => t.stop());
+
+          if (typeof md.enumerateDevices === "function") {
+            const devices2 = await md.enumerateDevices();
+            const cameras2 = devices2.filter((d: any) => d.kind === "videoinput");
+            if (cameras2.length > 0) {
+              setVideoDevices(cameras2);
+              return;
+            }
+          }
+
+          // fallback: inferir un dispositivo a partir del stream (si no se pudo enumerar)
+          const track = stream.getVideoTracks && stream.getVideoTracks()[0];
+          const inferredLabel = (track && (track.label || "Cámara (autodetectada)")) || "Cámara (autodetectada)";
+          setVideoDevices([
+            {
+              deviceId: (track && track.getSettings && track.getSettings().deviceId) || "default",
+              kind: "videoinput",
+              label: inferredLabel,
+              groupId: "",
+            } as unknown as MediaDeviceInfo,
+          ]);
+          return;
+        }
+
+        // Si llegamos aquí no hay forma de detectar cámaras
+        setVideoDevices([]);
+        setPermissionGranted(false);
+      } catch (err: any) {
+        console.error("Error detectando cámaras:", err);
+        setVideoDevices([]);
         setPermissionGranted(false);
       }
     };
 
     getCameras();
 
-    // Listener para cambios dinámicos (por ejemplo, conectar nueva cámara)
-    navigator.mediaDevices.addEventListener("devicechange", getCameras);
-    return () => navigator.mediaDevices.removeEventListener("devicechange", getCameras);
+    const handleDeviceChange = () => {
+      getCameras();
+    };
+
+    try {
+      if (nav.mediaDevices && typeof nav.mediaDevices.addEventListener === "function") {
+        nav.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+        return () => nav.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+      } else if (nav.mediaDevices) {
+        // fallback antiguo
+        (nav.mediaDevices as any).ondevicechange = handleDeviceChange;
+        return () => {
+          try {
+            (nav.mediaDevices as any).ondevicechange = null;
+          } catch {}
+        };
+      }
+    } catch {
+      // ignore attach listener errors
+    }
   }, []);
+
+  // Función para solicitar permiso explícito cuando el usuario lo pida
+  const requestPermission = async () => {
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      console.error("getUserMedia no está disponible");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setPermissionGranted(true);
+      stream.getTracks().forEach(track => track.stop());
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter(d => d.kind === "videoinput");
+      setVideoDevices(cameras);
+    } catch (err: any) {
+      console.error("Permiso denegado o error:", err);
+      setPermissionGranted(false);
+    }
+  };
 
   const handleOpenCapture = (deviceId: string) => {
     if (onOpenCapture) {
@@ -65,13 +188,25 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
             Cámaras detectadas en este equipo (interna, USB, IP, etc.)
           </p>
         </div>
-        <Button
-          className="bg-red-600 hover:bg-red-700"
-          onClick={() => window.location.reload()}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Actualizar Lista
-        </Button>
+
+        {/* Botones: actualizar y solicitar permiso */}
+        <div className="flex items-center space-x-2">
+          <Button
+            className="bg-red-600 hover:bg-red-700"
+            onClick={() => window.location.reload()}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Actualizar Lista
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={requestPermission}
+          >
+            Solicitar Permiso
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -139,7 +274,7 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
             <div className="text-gray-500 text-sm">
               {permissionGranted
                 ? "No se detectaron cámaras conectadas."
-                : "Debes otorgar permiso para acceder a la cámara."}
+                : "Debes otorgar permiso para acceder a la cámara o pulsa 'Solicitar Permiso'."}
             </div>
           ) : (
             <Table>

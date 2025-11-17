@@ -1,5 +1,15 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+"use client";
+
+import { useEffect, useState } from "react";
+import { endpoints } from "../../lib/api";
+
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../ui/card";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import {
@@ -17,14 +27,14 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { 
+import {
   Download,
   FileText,
   BarChart3,
   Calendar,
   TrendingUp,
   AlertCircle,
-  Clock
+  Clock,
 } from "lucide-react";
 
 interface DailyReport {
@@ -42,32 +52,59 @@ interface IncidentReport {
   trend: number;
 }
 
+interface Summary {
+  totalDays: number;
+  avgAttendance: number;
+  avgLate: number;
+  avgAbsent: number;
+  trend: number;
+}
+
+interface ReportsData {
+  dailyReports: DailyReport[];
+  incidentReports: IncidentReport[];
+  summary: Summary;
+}
+
 export function ReportsModule() {
-  const [selectedPeriod] = useState('month');
-  const [selectedGrade] = useState('all');
+  const [reports, setReports] = useState<ReportsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState("month");
+  const [selectedGrade, setSelectedGrade] = useState("all");
 
-  const dailyReports: DailyReport[] = [
-    { date: '20/01/2024', present: 132, late: 8, absent: 5, total: 145, rate: 91.0 },
-    { date: '19/01/2024', present: 128, late: 10, absent: 7, total: 145, rate: 88.3 },
-    { date: '18/01/2024', present: 135, late: 6, absent: 4, total: 145, rate: 93.1 },
-    { date: '17/01/2024', present: 130, late: 9, absent: 6, total: 145, rate: 89.7 },
-    { date: '16/01/2024', present: 133, late: 7, absent: 5, total: 145, rate: 91.7 },
-  ];
+  // === Cargar datos desde backend ===
+  useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const res = await fetch(endpoints.reports);
+        if (!res.ok) throw new Error("Error al obtener reportes");
+        const data = await res.json();
+        setReports(data);
+      } catch (err: any) {
+        console.error("Error al cargar reportes:", err);
+        setError("No se pudieron cargar los datos del servidor.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const incidentReports: IncidentReport[] = [
-    { type: 'Score bajo (<75%)', count: 12, trend: -3 },
-    { type: 'Liveness no detectado', count: 8, trend: -2 },
-    { type: 'Verificación manual requerida', count: 5, trend: 0 },
-    { type: 'Timeout de captura', count: 3, trend: -1 },
-  ];
+    fetchReports();
+  }, []);
 
-  const summary = {
-    totalDays: 5,
-    avgAttendance: 90.8,
-    avgLate: 8,
-    avgAbsent: 5.4,
-    trend: +2.3
-  };
+  if (loading)
+    return <p className="text-gray-500">Cargando reportes y estadísticas...</p>;
+
+  if (error)
+    return (
+      <p className="text-red-500 font-semibold">
+        ⚠️ {error} — Verifica la conexión con el backend.
+      </p>
+    );
+
+  if (!reports) return null;
+
+  const { summary, dailyReports, incidentReports } = reports;
 
   return (
     <div className="space-y-6">
@@ -103,7 +140,7 @@ export function ReportsModule() {
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div className="space-y-2">
               <Label>Período</Label>
-              <Select value={selectedPeriod}>
+              <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
@@ -120,7 +157,7 @@ export function ReportsModule() {
 
             <div className="space-y-2">
               <Label>Grado</Label>
-              <Select value={selectedGrade}>
+              <Select value={selectedGrade} onValueChange={setSelectedGrade}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
@@ -204,9 +241,7 @@ export function ReportsModule() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl text-yellow-600">{summary.avgLate}</div>
-            <p className="text-xs text-muted-foreground">
-              por día
-            </p>
+            <p className="text-xs text-muted-foreground">por día</p>
           </CardContent>
         </Card>
 
@@ -216,10 +251,10 @@ export function ReportsModule() {
             <AlertCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl text-red-600">{summary.avgAbsent.toFixed(1)}</div>
-            <p className="text-xs text-muted-foreground">
-              por día
-            </p>
+            <div className="text-2xl text-red-600">
+              {summary.avgAbsent.toFixed(1)}
+            </div>
+            <p className="text-xs text-muted-foreground">por día</p>
           </CardContent>
         </Card>
 
@@ -230,9 +265,7 @@ export function ReportsModule() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl text-blue-600">{summary.totalDays}</div>
-            <p className="text-xs text-muted-foreground">
-              días hábiles
-            </p>
+            <p className="text-xs text-muted-foreground">días hábiles</p>
           </CardContent>
         </Card>
       </div>
@@ -241,9 +274,7 @@ export function ReportsModule() {
       <Card>
         <CardHeader>
           <CardTitle>Tendencia de Asistencia</CardTitle>
-          <CardDescription>
-            Visualización de datos históricos
-          </CardDescription>
+          <CardDescription>Visualización de datos históricos</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-64 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center">
@@ -262,9 +293,7 @@ export function ReportsModule() {
       <Card>
         <CardHeader>
           <CardTitle>Asistencia por Día</CardTitle>
-          <CardDescription>
-            Desglose diario de registros
-          </CardDescription>
+          <CardDescription>Desglose diario de registros</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -299,19 +328,25 @@ export function ReportsModule() {
                   <TableCell>{report.total}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <span className={`${
-                        report.rate >= 90 ? 'text-green-600' :
-                        report.rate >= 80 ? 'text-yellow-600' :
-                        'text-red-600'
-                      }`}>
+                      <span
+                        className={`${
+                          report.rate >= 90
+                            ? "text-green-600"
+                            : report.rate >= 80
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                        }`}
+                      >
                         {report.rate.toFixed(1)}%
                       </span>
                       <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className={`h-2 rounded-full ${
-                            report.rate >= 90 ? 'bg-green-600' :
-                            report.rate >= 80 ? 'bg-yellow-600' :
-                            'bg-red-600'
+                            report.rate >= 90
+                              ? "bg-green-600"
+                              : report.rate >= 80
+                              ? "bg-yellow-600"
+                              : "bg-red-600"
                           }`}
                           style={{ width: `${report.rate}%` }}
                         ></div>
@@ -357,12 +392,20 @@ export function ReportsModule() {
                   <TableCell className="text-right">
                     {incident.trend !== 0 && (
                       <div className="flex items-center justify-end gap-1">
-                        <TrendingUp 
+                        <TrendingUp
                           className={`h-3 w-3 ${
-                            incident.trend < 0 ? 'text-green-600 rotate-180' : 'text-red-600'
-                          }`} 
+                            incident.trend < 0
+                              ? "text-green-600 rotate-180"
+                              : "text-red-600"
+                          }`}
                         />
-                        <span className={incident.trend < 0 ? 'text-green-600' : 'text-red-600'}>
+                        <span
+                          className={
+                            incident.trend < 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
                           {Math.abs(incident.trend)}
                         </span>
                       </div>

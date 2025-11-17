@@ -1,38 +1,68 @@
-import { useState } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
+import { endpoints } from "../../lib/api";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
-import { 
+
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "../ui/tooltip";
-import { 
-  Settings, 
-  AlertCircle, 
+
+import {
+  Settings,
+  AlertCircle,
   Eye,
   Clock,
   Save,
-  RotateCcw
+  RotateCcw,
 } from "lucide-react";
 
 export function PoliciesSettings() {
-  const [threshold, setThreshold] = useState([75]);
+  const [config, setConfig] = useState<any | null>(null);
+  const [threshold, setThreshold] = useState<number[]>([75]);
   const [requireLiveness, setRequireLiveness] = useState(true);
-  const [retentionDays, setRetentionDays] = useState([90]);
+  const [retentionDays, setRetentionDays] = useState<number[]>([90]);
 
-  const handleSave = () => {
-    // Placeholder para guardar configuración
-    alert('Configuración guardada exitosamente');
+  // --- Cargar configuración desde backend ---
+  useEffect(() => {
+    fetch(endpoints.policies)
+      .then((res) => res.json())
+      .then((data) => {
+        setConfig(data);
+        setThreshold([data.threshold]);
+        setRequireLiveness(data.requireLiveness);
+        setRetentionDays([data.retentionDays]);
+      })
+      .catch((err) => console.error("Error al cargar políticas:", err));
+  }, []);
+
+  if (!config) return <p className="text-gray-600">Cargando configuración...</p>;
+
+  // --- Restablecer valores a los del backend original ---
+  const handleReset = () => {
+    setThreshold([config.threshold]);
+    setRequireLiveness(config.requireLiveness);
+    setRetentionDays([config.retentionDays]);
   };
 
-  const handleReset = () => {
-    setThreshold([75]);
-    setRequireLiveness(true);
-    setRetentionDays([90]);
+  // --- Simular guardado (a futuro enviará PUT al backend) ---
+  const handleSave = () => {
+    const newConfig = {
+      ...config,
+      threshold: threshold[0],
+      requireLiveness,
+      retentionDays: retentionDays[0],
+    };
+    console.log("Configuración guardada:", newConfig);
+    alert("✅ Configuración guardada exitosamente (simulada)");
   };
 
   return (
@@ -45,7 +75,7 @@ export function PoliciesSettings() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Threshold Configuration */}
+        {/* === Threshold Configuration === */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -71,8 +101,8 @@ export function PoliciesSettings() {
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs">
                         <p className="text-sm">
-                          Valores altos (≥80%) reducen falsos positivos pero pueden 
-                          aumentar falsos rechazos. Valores bajos (≤70%) son más 
+                          Valores altos (≥80%) reducen falsos positivos pero pueden
+                          aumentar falsos rechazos. Valores bajos (≤70%) son más
                           permisivos pero menos seguros.
                         </p>
                       </TooltipContent>
@@ -120,13 +150,21 @@ export function PoliciesSettings() {
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-600 mb-1">Falsos positivos</p>
                   <p className="text-green-600">
-                    {threshold[0] >= 80 ? 'Muy Bajo' : threshold[0] >= 70 ? 'Bajo' : 'Medio'}
+                    {threshold[0] >= 80
+                      ? "Muy Bajo"
+                      : threshold[0] >= 70
+                      ? "Bajo"
+                      : "Medio"}
                   </p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-600 mb-1">Falsos rechazos</p>
-                  <p className={threshold[0] >= 85 ? 'text-yellow-600' : 'text-green-600'}>
-                    {threshold[0] >= 85 ? 'Medio' : 'Bajo'}
+                  <p
+                    className={
+                      threshold[0] >= 85 ? "text-yellow-600" : "text-green-600"
+                    }
+                  >
+                    {threshold[0] >= 85 ? "Medio" : "Bajo"}
                   </p>
                 </div>
               </div>
@@ -134,7 +172,7 @@ export function PoliciesSettings() {
           </CardContent>
         </Card>
 
-        {/* Liveness Detection */}
+        {/* === Liveness Detection === */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -160,7 +198,7 @@ export function PoliciesSettings() {
               />
             </div>
 
-            {requireLiveness && (
+            {requireLiveness ? (
               <div className="space-y-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <div className="flex items-start gap-3">
@@ -197,9 +235,7 @@ export function PoliciesSettings() {
                   </div>
                 </div>
               </div>
-            )}
-
-            {!requireLiveness && (
+            ) : (
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
@@ -216,7 +252,7 @@ export function PoliciesSettings() {
           </CardContent>
         </Card>
 
-        {/* Data Retention */}
+        {/* === Data Retention === */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -231,7 +267,9 @@ export function PoliciesSettings() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <Label>Período de retención</Label>
-                <span className="text-2xl text-red-600">{retentionDays[0]} días</span>
+                <span className="text-2xl text-red-600">
+                  {retentionDays[0]} días
+                </span>
               </div>
 
               <Slider
@@ -252,15 +290,23 @@ export function PoliciesSettings() {
             <div className="space-y-3">
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">Almacenamiento estimado</span>
+                  <span className="text-sm text-gray-600">
+                    Almacenamiento estimado
+                  </span>
                   <span>
-                    {retentionDays[0] >= 180 ? '~500 MB' : retentionDays[0] >= 90 ? '~250 MB' : '~100 MB'}
+                    {retentionDays[0] >= 180
+                      ? "~500 MB"
+                      : retentionDays[0] >= 90
+                      ? "~250 MB"
+                      : "~100 MB"}
                   </span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
+                  <div
                     className="bg-red-600 h-2 rounded-full transition-all"
-                    style={{ width: `${(retentionDays[0] / 365) * 100}%` }}
+                    style={{
+                      width: `${(retentionDays[0] / 365) * 100}%`,
+                    }}
                   ></div>
                 </div>
               </div>
@@ -274,7 +320,7 @@ export function PoliciesSettings() {
           </CardContent>
         </Card>
 
-        {/* Privacy Notice */}
+        {/* === Privacy Notice === */}
         <Card className="border-gray-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -285,35 +331,31 @@ export function PoliciesSettings() {
           <CardContent className="space-y-4">
             <div className="text-sm text-gray-700 space-y-3">
               <p>
-                El sistema de reconocimiento facial de Fe y Alegría Nº 39 cumple con:
+                El sistema de reconocimiento facial de Fe y Alegría Nº 39 cumple
+                con:
               </p>
               <ul className="space-y-2">
-                <li className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 bg-red-600 rounded-full mt-2"></div>
-                  <span>Ley de Protección de Datos Personales (Ley N° 29733)</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 bg-red-600 rounded-full mt-2"></div>
-                  <span>Políticas internas de privacidad institucional</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 bg-red-600 rounded-full mt-2"></div>
-                  <span>Consentimiento informado de padres de familia</span>
-                </li>
+                {config.privacy.lawCompliance.map((law: string, index: number) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <div className="w-1.5 h-1.5 bg-red-600 rounded-full mt-2"></div>
+                    <span>{law}</span>
+                  </li>
+                ))}
               </ul>
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-700">
-                Los datos biométricos se procesan de forma local y solo se almacenan
-                vectores matemáticos (plantillas), no imágenes faciales completas.
+                Los datos biométricos se procesan de forma local y solo se
+                almacenan vectores matemáticos (plantillas), no imágenes faciales
+                completas.
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Action Buttons */}
+      {/* === Action Buttons === */}
       <div className="flex items-center justify-end gap-3 pt-6 border-t">
         <Button variant="outline" onClick={handleReset}>
           <RotateCcw className="h-4 w-4 mr-2" />

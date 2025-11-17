@@ -1,12 +1,14 @@
-// PUESTOS DE ENRROLLAMIENTO
+"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { endpoints } from "../../lib/api";
+
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { 
+import {
   Table,
   TableBody,
   TableCell,
@@ -14,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "../ui/table";
-import { 
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,13 +24,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
-import { 
-  UserCheck, 
-  Upload, 
+import {
+  UserCheck,
+  Upload,
   AlertCircle,
   CheckCircle2,
   Search,
-  Filter
+  Filter,
 } from "lucide-react";
 
 interface Student {
@@ -37,82 +39,62 @@ interface Student {
   code: string;
   grade: string;
   section: string;
-  templateStatus: 'complete' | 'incomplete' | 'pending';
+  templateStatus: "complete" | "incomplete" | "pending";
   lastUpdate: string;
 }
 
 export function EnrollmentManagement() {
-  const [students] = useState<Student[]>([
-    {
-      id: '1',
-      name: 'García Pérez, Juan Carlos',
-      code: 'EST-2024-001',
-      grade: '5to',
-      section: 'A',
-      templateStatus: 'complete',
-      lastUpdate: '15/01/2024'
-    },
-    {
-      id: '2',
-      name: 'Rodríguez Silva, Miguel Ángel',
-      code: 'EST-2024-002',
-      grade: '5to',
-      section: 'A',
-      templateStatus: 'complete',
-      lastUpdate: '15/01/2024'
-    },
-    {
-      id: '3',
-      name: 'López Martínez, Carlos Eduardo',
-      code: 'EST-2024-003',
-      grade: '4to',
-      section: 'B',
-      templateStatus: 'incomplete',
-      lastUpdate: '10/01/2024'
-    },
-    {
-      id: '4',
-      name: 'Fernández Vega, José Luis',
-      code: 'EST-2024-004',
-      grade: '3ro',
-      section: 'A',
-      templateStatus: 'pending',
-      lastUpdate: '--'
-    },
-    {
-      id: '5',
-      name: 'Sánchez Torres, Roberto Carlos',
-      code: 'EST-2024-005',
-      grade: '5to',
-      section: 'B',
-      templateStatus: 'complete',
-      lastUpdate: '18/01/2024'
-    }
-  ]);
-
+  // === Estado principal ===
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
 
+  // === Cargar datos desde backend ===
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const res = await fetch(endpoints.students);
+        if (!res.ok) throw new Error("Error al obtener datos");
+        const data = await res.json();
+        setStudents(data);
+      } catch (err) {
+        console.error("Error al cargar estudiantes:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
+
+  // === Mostrar loader ===
+  if (loading) return <p className="text-gray-500">Cargando estudiantes...</p>;
+
+  // === Funciones internas ===
   const handleUpdateTemplate = (student: Student) => {
     setSelectedStudent(student);
     setIsDialogOpen(true);
   };
 
-  const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.code.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredStudents = students.filter(
+    (student) =>
+      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const stats = {
     total: students.length,
-    complete: students.filter(s => s.templateStatus === 'complete').length,
-    incomplete: students.filter(s => s.templateStatus === 'incomplete').length,
-    pending: students.filter(s => s.templateStatus === 'pending').length
+    complete: students.filter((s) => s.templateStatus === "complete").length,
+    incomplete: students.filter((s) => s.templateStatus === "incomplete").length,
+    pending: students.filter((s) => s.templateStatus === "pending").length,
   };
 
+  // === Render principal ===
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h2 className="text-2xl text-gray-900">Enrolamiento de Estudiantes</h2>
         <p className="text-gray-600">
@@ -141,7 +123,9 @@ export function EnrollmentManagement() {
           <CardContent>
             <div className="text-2xl text-green-600">{stats.complete}</div>
             <p className="text-xs text-muted-foreground">
-              {((stats.complete / stats.total) * 100).toFixed(0)}% del total
+              {stats.total > 0
+                ? `${((stats.complete / stats.total) * 100).toFixed(0)}% del total`
+                : "0% del total"}
             </p>
           </CardContent>
         </Card>
@@ -223,22 +207,30 @@ export function EnrollmentManagement() {
                   <TableCell>
                     <Badge
                       variant={
-                        student.templateStatus === 'complete' ? 'default' :
-                        student.templateStatus === 'incomplete' ? 'secondary' :
-                        'outline'
+                        student.templateStatus === "complete"
+                          ? "default"
+                          : student.templateStatus === "incomplete"
+                          ? "secondary"
+                          : "outline"
                       }
                       className={
-                        student.templateStatus === 'complete' ? 'bg-green-600' :
-                        student.templateStatus === 'incomplete' ? 'bg-yellow-600' :
-                        'bg-red-600 text-white'
+                        student.templateStatus === "complete"
+                          ? "bg-green-600"
+                          : student.templateStatus === "incomplete"
+                          ? "bg-yellow-600"
+                          : "bg-red-600 text-white"
                       }
                     >
-                      {student.templateStatus === 'complete' ? 'Completo' :
-                       student.templateStatus === 'incomplete' ? 'Incompleto' :
-                       'Pendiente'}
+                      {student.templateStatus === "complete"
+                        ? "Completo"
+                        : student.templateStatus === "incomplete"
+                        ? "Incompleto"
+                        : "Pendiente"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-gray-600">{student.lastUpdate}</TableCell>
+                  <TableCell className="text-gray-600">
+                    {student.lastUpdate}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button
                       size="sm"
@@ -265,7 +257,7 @@ export function EnrollmentManagement() {
               {selectedStudent?.name} • {selectedStudent?.code}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-6 py-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-3">

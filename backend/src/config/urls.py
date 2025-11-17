@@ -22,4 +22,5 @@ urlpatterns = [
     path('api/attendance/', include('attendance.urls')),
     # 🔹 Incluye las rutas del procesamiento facial
     path("api/procesamiento/", include("api.procesamiento.urls")),
+    path("api/", include("api.urls")),
 ]

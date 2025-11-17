@@ -1,22 +1,26 @@
+"use client";
+
 import { useState } from "react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+
 import { AttendanceDashboard } from "./admin/AttendanceDashboard";
 import { DevicesList } from "./admin/DevicesList";
 import { CaptureStation } from "./admin/CaptureStation";
 import { EnrollmentManagement } from "./admin/EnrollmentManagement";
 import { PoliciesSettings } from "./admin/PoliciesSettings";
 import { ReportsModule } from "./admin/ReportsModule";
-import { 
-  LogOut, 
-  Camera, 
-  BarChart3, 
+
+import {
+  LogOut,
+  Camera,
+  BarChart3,
   Monitor,
   UserCheck,
   Settings,
   Bell,
-  LayoutDashboard
+  LayoutDashboard,
 } from "lucide-react";
 
 interface DashboardMujeresProps {
@@ -24,37 +28,49 @@ interface DashboardMujeresProps {
   onLogout: () => void;
 }
 
-type View = 'dashboard' | 'devices' | 'capture' | 'enrollment' | 'policies' | 'reports';
+type View =
+  | "dashboard"
+  | "devices"
+  | "capture"
+  | "enrollment"
+  | "policies"
+  | "reports";
 
 export function DashboardMujeres({ userEmail, onLogout }: DashboardMujeresProps) {
-  const [activeView, setActiveView] = useState<View>('dashboard');
-  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [activeView, setActiveView] = useState<View>("dashboard");
+  const [selectedDevice, setSelectedDevice] = useState<string>("");
 
   const handleOpenCapture = (deviceId: string) => {
     setSelectedDevice(deviceId);
-    setActiveView('capture');
+    setActiveView("capture");
   };
 
   const handleBackToDevices = () => {
-    setActiveView('devices');
-    setSelectedDevice('');
+    setActiveView("devices");
+    setSelectedDevice("");
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ========================= HEADER ========================= */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
+            {/* --- Título del sistema --- */}
             <div className="flex items-center">
-              <h1 className="text-2xl text-red-600">Fe y Alegría Nº 39</h1>
+              <h1 className="text-2xl font-semibold text-blue-600">
+                Fe y Alegría Nº 39
+              </h1>
               <span className="ml-4 text-gray-500">|</span>
-              <span className="ml-4 text-gray-700">Panel de Administración</span>
-              <Badge variant="outline" className="ml-4">
+              <span className="ml-4 text-gray-700">
+                Panel de Administración
+              </span>
+              <Badge variant="outline" className="ml-4 border-blue-600 text-blue-600">
                 Mujeres
               </Badge>
             </div>
-            
+
+            {/* --- Usuario y notificaciones --- */}
             <div className="flex items-center space-x-4">
               <Button variant="ghost" size="sm">
                 <Bell className="h-4 w-4" />
@@ -68,7 +84,7 @@ export function DashboardMujeres({ userEmail, onLogout }: DashboardMujeresProps)
                   variant="ghost"
                   size="sm"
                   onClick={onLogout}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 >
                   <LogOut className="h-4 w-4" />
                 </Button>
@@ -78,31 +94,41 @@ export function DashboardMujeres({ userEmail, onLogout }: DashboardMujeresProps)
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Navigation Tabs */}
-        <Tabs value={activeView} onValueChange={(value) => setActiveView(value as View)} className="space-y-6">
+      {/* ========================= MAIN CONTENT ========================= */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <Tabs
+          value={activeView}
+          onValueChange={(value) => setActiveView(value as View)}
+          className="space-y-6"
+        >
+          {/* --- Barra de navegación superior --- */}
           <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               Dashboard
             </TabsTrigger>
+
             <TabsTrigger value="devices" className="flex items-center gap-2">
               <Monitor className="h-4 w-4" />
               Puestos
             </TabsTrigger>
+
             <TabsTrigger value="enrollment" className="flex items-center gap-2">
               <UserCheck className="h-4 w-4" />
               Enrolamiento
             </TabsTrigger>
+
             <TabsTrigger value="policies" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Políticas
             </TabsTrigger>
+
             <TabsTrigger value="reports" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               Reportes
             </TabsTrigger>
-            {activeView === 'capture' && (
+
+            {activeView === "capture" && (
               <TabsTrigger value="capture" className="flex items-center gap-2">
                 <Camera className="h-4 w-4" />
                 Captura
@@ -110,40 +136,42 @@ export function DashboardMujeres({ userEmail, onLogout }: DashboardMujeresProps)
             )}
           </TabsList>
 
-          {/* Dashboard de Asistencia */}
+          {/* ========================= CONTENIDOS ========================= */}
+
+          {/* --- Dashboard de Asistencia --- */}
           <TabsContent value="dashboard">
             <AttendanceDashboard />
           </TabsContent>
 
-          {/* Puestos de Captura */}
+          {/* --- Puestos de Captura --- */}
           <TabsContent value="devices">
             <DevicesList onOpenCapture={handleOpenCapture} />
           </TabsContent>
 
-          {/* Vista de Captura */}
+          {/* --- Vista Captura --- */}
           <TabsContent value="capture">
-            <CaptureStation 
-              deviceId={selectedDevice} 
+            <CaptureStation
+              deviceId={selectedDevice}
               onBack={handleBackToDevices}
             />
           </TabsContent>
 
-          {/* Enrolamiento */}
+          {/* --- Enrolamiento --- */}
           <TabsContent value="enrollment">
             <EnrollmentManagement />
           </TabsContent>
 
-          {/* Políticas y Umbrales */}
+          {/* --- Políticas --- */}
           <TabsContent value="policies">
             <PoliciesSettings />
           </TabsContent>
 
-          {/* Reportes */}
+          {/* --- Reportes --- */}
           <TabsContent value="reports">
             <ReportsModule />
           </TabsContent>
         </Tabs>
-      </div>
+      </main>
     </div>
   );
 }

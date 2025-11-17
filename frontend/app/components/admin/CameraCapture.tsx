@@ -1,16 +1,12 @@
 "use client";
+import * as tf from "@tensorflow/tfjs";
+import "@tensorflow/tfjs-backend-webgl";
+import "@tensorflow/tfjs-backend-cpu";
 import * as faceapi from "face-api.js";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { 
-  Camera, 
-  CameraOff,
-  CheckCircle2, 
-  XCircle,
-  AlertCircle,
-  Eye
-} from "lucide-react";
+import { Camera, CameraOff, CheckCircle2, XCircle, AlertCircle, Eye } from "lucide-react";
 
 type CaptureState = "idle" | "waiting" | "analyzing" | "verified" | "rejected";
 
@@ -37,17 +33,13 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: C
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // carpeta /public/models/
         await Promise.all([
-  faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector"),
-  faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68"),
-  faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition")
-]);
-
-        console.log("✅ Modelos de face-api.js cargados");
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition")
+        ]);
         setModelsLoaded(true);
       } catch (err) {
-        console.error("Error al cargar modelos:", err);
         setError("No se pudieron cargar los modelos de detección facial.");
       }
     };
