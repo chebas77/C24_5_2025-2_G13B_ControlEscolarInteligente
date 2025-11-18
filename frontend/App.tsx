@@ -35,7 +35,7 @@ export default function App() {
 
   const handleLogin = (email: string, role: 'admin' | 'admin-mujeres' | 'teacher' | 'parent') => {
     // Verificar que el email pertenece al dominio autorizado
-    if (!email.endsWith('@feyalegria39.edu.pe')) {
+    if (!email.endsWith('@gmail.com') && !email.endsWith('@feyalegria39.edu.pe')) {
       alert('Solo se permiten cuentas del dominio @feyalegria39.edu.pe');
       return;
     }

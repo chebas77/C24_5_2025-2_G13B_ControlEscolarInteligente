@@ -42,7 +42,9 @@ INSTALLED_APPS = [
 
     # Dependencias
     'rest_framework',
+    'rest_framework_simplejwt',
     'channels',
+    'corsheaders',
 
     # Apps del sistema
     'attendance',
@@ -51,8 +53,21 @@ INSTALLED_APPS = [
     'reports',
     'config_app',
 ]
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
+
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -98,7 +113,10 @@ DATABASES = {
         'PASSWORD': os.getenv('PGPASSWORD'),
         'HOST': os.getenv('PGHOST'),
         'PORT': os.getenv('PGPORT', '5432'),
-        'OPTIONS': {'sslmode': os.getenv('DB_SSLMODE', '')},
+        'OPTIONS': {
+            'sslmode': os.getenv('DB_SSLMODE', 'require'),
+            'connect_timeout': 10,
+        },
     }
 }
 

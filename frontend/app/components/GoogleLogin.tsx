@@ -3,26 +3,32 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 interface GoogleLoginProps {
-  onLogin: (email: string, role: 'admin' | 'admin-mujeres' | 'teacher' | 'parent') => void;
+  onLogin: (email: string, role: 'admin' | 'admin-mujeres' | 'teacher' | 'parent', dniHijo?: string, accessToken?: string) => void;
   onBack: () => void;
 }
 
 export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  // Estado para login de padre
+  const [showParentForm, setShowParentForm] = useState(false);
+  const [parentEmail, setParentEmail] = useState("");
+  const [dniHijo, setDniHijo] = useState("");
+  const [parentLoading, setParentLoading] = useState(false);
+  const [parentError, setParentError] = useState("");
 
-  // Usuarios de demostración para el dominio @feyalegria39.edu.pe
+  // Usuarios de demostración - ahora acepta cualquier dominio
   const demoUsers = {
-    'admin.varones@feyalegria39.edu.pe': 'admin',
-    'director.varones@feyalegria39.edu.pe': 'admin',
-    'admin.mujeres@feyalegria39.edu.pe': 'admin-mujeres',
-    'directora.mujeres@feyalegria39.edu.pe': 'admin-mujeres',
-    'profesor.silva@feyalegria39.edu.pe': 'teacher',
-    'profesor.martinez@feyalegria39.edu.pe': 'teacher',
-    'profesor.lopez@feyalegria39.edu.pe': 'teacher',
-    'padre.garcia@feyalegria39.edu.pe': 'parent',
-    'madre.rodriguez@feyalegria39.edu.pe': 'parent',
-    'tutor.mendoza@feyalegria39.edu.pe': 'parent'
+    'admin.varones@gmail.com': 'admin',
+    'director.varones@gmail.com': 'admin',
+    'admin.mujeres@gmail.com': 'admin-mujeres',
+    'directora.mujeres@gmail.com': 'admin-mujeres',
+    'profesor.silva@gmail.com': 'teacher',
+    'profesor.martinez@gmail.com': 'teacher',
+    'profesor.lopez@gmail.com': 'teacher',
+    'padre.garcia@gmail.com': 'parent',
+    'madre.rodriguez@gmail.com': 'parent',
+    'tutor.mendoza@gmail.com': 'parent'
   };
 
   const handleGoogleLogin = async () => {
@@ -39,11 +45,6 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
       // Simular selección de cuenta (en una implementación real, Google mostraría el selector)
       const emails = Object.keys(demoUsers);
       const randomEmail = emails[Math.floor(Math.random() * emails.length)];
-      
-      // Verificar que el email pertenece al dominio autorizado
-      if (!randomEmail.endsWith('@feyalegria39.edu.pe')) {
-        throw new Error('Solo se permiten cuentas del dominio @feyalegria39.edu.pe');
-      }
 
       const role = demoUsers[randomEmail as keyof typeof demoUsers] as 'admin' | 'admin-mujeres' | 'teacher' | 'parent';
       
@@ -51,7 +52,7 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
       onLogin(randomEmail, role);
       
     } catch (err) {
-      setError('Error al autenticar con Google. Verifique que su cuenta pertenezca al dominio @feyalegria39.edu.pe');
+      setError('Error al autenticar con Google. Por favor, intente nuevamente.');
     } finally {
       setIsLoading(false);
     }
@@ -61,6 +62,31 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
   const handleDemoLogin = (email: string) => {
     const role = demoUsers[email as keyof typeof demoUsers] as 'admin' | 'admin-mujeres' | 'teacher' | 'parent';
     onLogin(email, role);
+  };
+
+  // Nuevo: Login real para padres (llamando backend Django)
+  const handleParentLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setParentLoading(true);
+    setParentError("");
+    try {
+      const res = await fetch("http://localhost:8000/api/reports/padres/login/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: parentEmail, dni_hijo: dniHijo })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("accessToken", data.access);
+        onLogin(parentEmail, "parent", dniHijo, data.access);
+      } else {
+        setParentError("Credenciales incorrectas.");
+      }
+    } catch {
+      setParentError("Error al conectar al servidor.");
+    } finally {
+      setParentLoading(false);
+    }
   };
 
   return (
@@ -75,7 +101,7 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
           <CardHeader>
             <CardTitle>Autenticación Institucional</CardTitle>
             <CardDescription>
-              Use su cuenta @feyalegria39.edu.pe para acceder al sistema
+              Use su cuenta de correo electrónico para acceder al sistema
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -120,17 +146,17 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('admin.varones@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('admin.varones@gmail.com')}
                     >
-                      👨‍💼 admin.varones@feyalegria39.edu.pe
+                      👨‍💼 admin.varones@gmail.com
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('director.varones@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('director.varones@gmail.com')}
                     >
-                      🏢 director.varones@feyalegria39.edu.pe
+                      🏢 director.varones@gmail.com
                     </Button>
                   </div>
                 </div>
@@ -142,17 +168,17 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('admin.mujeres@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('admin.mujeres@gmail.com')}
                     >
-                      👩‍💼 admin.mujeres@feyalegria39.edu.pe
+                      👩‍💼 admin.mujeres@gmail.com
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('directora.mujeres@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('directora.mujeres@gmail.com')}
                     >
-                      🏢 directora.mujeres@feyalegria39.edu.pe
+                      🏢 directora.mujeres@gmail.com
                     </Button>
                   </div>
                 </div>
@@ -164,17 +190,17 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('profesor.silva@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('profesor.silva@gmail.com')}
                     >
-                      👨‍🏫 profesor.silva@feyalegria39.edu.pe
+                      👨‍🏫 profesor.silva@gmail.com
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('profesor.martinez@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('profesor.martinez@gmail.com')}
                     >
-                      👩‍🏫 profesor.martinez@feyalegria39.edu.pe
+                      👩‍🏫 profesor.martinez@gmail.com
                     </Button>
                   </div>
                 </div>
@@ -186,22 +212,74 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('padre.garcia@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('padre.garcia@gmail.com')}
                     >
-                      👨‍👩‍👧 padre.garcia@feyalegria39.edu.pe
+                      👨‍👩‍👧 padre.garcia@gmail.com
                     </Button>
                     <Button 
                       variant="outline" 
                       size="sm" 
                       className="w-full text-left justify-start text-xs"
-                      onClick={() => handleDemoLogin('madre.rodriguez@feyalegria39.edu.pe')}
+                      onClick={() => handleDemoLogin('madre.rodriguez@gmail.com')}
                     >
-                      👩‍👧‍👦 madre.rodriguez@feyalegria39.edu.pe
+                      👩‍👧‍👦 madre.rodriguez@gmail.com
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="w-full text-left justify-start text-xs"
+                      onClick={() => setShowParentForm(true)}
+                    >
+                      👨‍👩‍👧 Acceder como padre/madre utilizando email y DNI de hijo
                     </Button>
                   </div>
                 </div>
               </div>
             </div>
+
+            {/* Formulario real para padres */}
+            {showParentForm && (
+              <form onSubmit={handleParentLogin} className="mt-4 p-4 bg-gray-100 rounded">
+                <h3 className="text-lg font-bold mb-2">Login para Padres</h3>
+                <div className="mb-2">
+                  <label className="block text-xs font-bold mb-1">Email del padre</label>
+                  <input
+                    value={parentEmail}
+                    onChange={e => setParentEmail(e.target.value)}
+                    type="email"
+                    required
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="block text-xs font-bold mb-1">DNI del hijo</label>
+                  <input
+                    value={dniHijo}
+                    onChange={e => setDniHijo(e.target.value)}
+                    type="text"
+                    required
+                    className="w-full border rounded p-2"
+                  />
+                </div>
+                {parentError && <div className="mb-2 text-red-600 text-xs">{parentError}</div>}
+                <Button
+                  type="submit"
+                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                  size="lg"
+                  disabled={parentLoading}
+                >
+                  {parentLoading ? 'Autenticando...' : 'Ingresar como padre/madre'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full mt-2"
+                  onClick={() => setShowParentForm(false)}
+                  type="button"
+                >
+                  ← Volver
+                </Button>
+              </form>
+            )}
 
             <Button
               variant="outline"
@@ -215,7 +293,7 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
 
         <div className="text-center">
           <p className="text-xs text-gray-500">
-            Solo cuentas del dominio @feyalegria39.edu.pe pueden acceder al sistema
+            Sistema de Control Escolar Inteligente
           </p>
         </div>
       </div>
