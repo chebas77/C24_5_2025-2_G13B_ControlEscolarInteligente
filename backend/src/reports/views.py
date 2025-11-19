@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Padre, Alumno, AsistenciaDetalle, Asistencia, NotificacionPadre, PersonalEducativo, Comunicado
+from .models import Padre, Alumno, AsistenciaDetalle, Asistencia, NotificacionPadre, PersonalEducativo, Comunicado, PreferenciasPadre
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from datetime import datetime, timedelta
@@ -727,3 +727,98 @@ class ExportarAsistenciaView(APIView):
         filename = f"asistencia_{alumno_info['nombre'].replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.xlsx"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+
+class PadrePreferenciasView(APIView):
+    """
+    Endpoint para gestionar preferencias del padre
+    GET: Obtener preferencias actuales
+    PUT: Actualizar preferencias
+    """
+    def get(self, request, email):
+        try:
+            padre = Padre.objects.filter(email=email).first()
+            if not padre:
+                return Response({'error': 'Padre no encontrado'}, status=404)
+            
+            # Obtener o crear preferencias
+            preferencias, created = PreferenciasPadre.objects.get_or_create(
+                fk_padre=padre,
+                defaults={
+                    'telefono': padre.celular or '',
+                    'notificaciones_email': True,
+                    'notificaciones_sms': False,
+                    'notificar_asistencia': True,
+                    'notificar_calificaciones': True,
+                    'notificar_comportamiento': True,
+                    'frecuencia_resumen': 'semanal'
+                }
+            )
+            
+            return Response({
+                'telefono': preferencias.telefono or padre.celular or '',
+                'email': padre.email,
+                'direccion': preferencias.direccion or '',
+                'notificaciones_email': preferencias.notificaciones_email,
+                'notificaciones_sms': preferencias.notificaciones_sms,
+                'notificar_asistencia': preferencias.notificar_asistencia,
+                'notificar_calificaciones': preferencias.notificar_calificaciones,
+                'notificar_comportamiento': preferencias.notificar_comportamiento,
+                'frecuencia_resumen': preferencias.frecuencia_resumen
+            })
+        except Exception as e:
+            print(f"ERROR en PadrePreferenciasView GET: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+    
+    def put(self, request, email):
+        try:
+            padre = Padre.objects.filter(email=email).first()
+            if not padre:
+                return Response({'error': 'Padre no encontrado'}, status=404)
+            
+            # Actualizar email del padre si cambió
+            new_email = request.data.get('email')
+            if new_email and new_email != padre.email:
+                padre.email = new_email
+                padre.save()
+            
+            # Actualizar celular si cambió
+            new_telefono = request.data.get('telefono')
+            if new_telefono:
+                padre.celular = new_telefono
+                padre.save()
+            
+            # Obtener o crear preferencias
+            preferencias, created = PreferenciasPadre.objects.get_or_create(fk_padre=padre)
+            
+            # Actualizar preferencias
+            preferencias.telefono = request.data.get('telefono', preferencias.telefono)
+            preferencias.direccion = request.data.get('direccion', preferencias.direccion)
+            preferencias.notificaciones_email = request.data.get('notificaciones_email', preferencias.notificaciones_email)
+            preferencias.notificaciones_sms = request.data.get('notificaciones_sms', preferencias.notificaciones_sms)
+            preferencias.notificar_asistencia = request.data.get('notificar_asistencia', preferencias.notificar_asistencia)
+            preferencias.notificar_calificaciones = request.data.get('notificar_calificaciones', preferencias.notificar_calificaciones)
+            preferencias.notificar_comportamiento = request.data.get('notificar_comportamiento', preferencias.notificar_comportamiento)
+            preferencias.frecuencia_resumen = request.data.get('frecuencia_resumen', preferencias.frecuencia_resumen)
+            
+            preferencias.save()
+            
+            return Response({
+                'message': 'Preferencias actualizadas correctamente',
+                'telefono': preferencias.telefono,
+                'email': padre.email,
+                'direccion': preferencias.direccion,
+                'notificaciones_email': preferencias.notificaciones_email,
+                'notificaciones_sms': preferencias.notificaciones_sms,
+                'notificar_asistencia': preferencias.notificar_asistencia,
+                'notificar_calificaciones': preferencias.notificar_calificaciones,
+                'notificar_comportamiento': preferencias.notificar_comportamiento,
+                'frecuencia_resumen': preferencias.frecuencia_resumen
+            })
+        except Exception as e:
+            print(f"ERROR en PadrePreferenciasView PUT: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)

@@ -16,7 +16,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
+      className={cn("p-3 w-full flex justify-center", className)}
       weekStartsOn={0}
       classNames={{
         months: "flex flex-col sm:flex-row gap-2",
@@ -30,11 +30,11 @@ function Calendar({
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-x-1",
-        head_row: "flex",
+        table: "w-full border-collapse",
+        head_row: "flex justify-center",
         head_cell:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-        row: "flex w-full mt-2",
+          "text-muted-foreground rounded-md w-9 font-normal text-[0.8rem]",
+        row: "flex w-full mt-2 justify-center",
         cell: cn(
           "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-range-end)]:rounded-r-md",
           props.mode === "range"
@@ -43,14 +43,14 @@ function Calendar({
         ),
         day: cn(
           buttonVariants({ variant: "ghost" }),
-          "size-8 p-0 font-normal aria-selected:opacity-100",
+          "size-9 p-0 font-normal aria-selected:opacity-100 transition-all",
         ),
         day_range_start:
           "day-range-start aria-selected:bg-primary aria-selected:text-primary-foreground",
         day_range_end:
           "day-range-end aria-selected:bg-primary aria-selected:text-primary-foreground",
         day_selected:
-          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground ring-1 ring-primary ring-offset-1",
         day_today: "bg-accent text-accent-foreground",
         day_outside:
           "day-outside text-muted-foreground aria-selected:text-muted-foreground",

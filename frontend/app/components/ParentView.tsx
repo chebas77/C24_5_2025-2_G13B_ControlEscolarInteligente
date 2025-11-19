@@ -4,6 +4,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/
 import { Badge } from "./ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { Calendar } from "./ui/calendar";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Switch } from "./ui/switch";
 import { 
   LogOut, 
   User, 
@@ -16,8 +20,12 @@ import {
   BookOpen,
   Settings,
   Bell,
-  Download
+  Download,
+  Mail,
+  Phone,
+  MapPin
 } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface AttendanceRecord {
   date: string;
@@ -61,19 +69,44 @@ interface Comunicado {
   estado_envio?: string;
 }
 
+interface ParentProfile {
+  telefono: string;
+  email: string;
+  direccion: string;
+  notificaciones_email: boolean;
+  notificaciones_sms: boolean;
+  notificar_asistencia: boolean;
+  notificar_calificaciones: boolean;
+  notificar_comportamiento: boolean;
+  frecuencia_resumen: 'diario' | 'semanal' | 'mensual';
+}
+
 interface ParentViewProps {
   userEmail: string;
   onLogout: () => void;
 }
 
 export function ParentView({ userEmail, onLogout }: ParentViewProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedPeriod, setSelectedPeriod] = useState("all");
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [calificaciones, setCalificaciones] = useState<Calificaciones | null>(null);
   const [comportamiento, setComportamiento] = useState<Comportamiento | null>(null);
   const [comunicados, setComunicados] = useState<Comunicado[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [parentProfile, setParentProfile] = useState<ParentProfile>({
+    telefono: "",
+    email: userEmail,
+    direccion: "",
+    notificaciones_email: true,
+    notificaciones_sms: false,
+    notificar_asistencia: true,
+    notificar_calificaciones: true,
+    notificar_comportamiento: true,
+    frecuencia_resumen: "semanal"
+  });
+  const [profileLoading, setProfileLoading] = useState(false);
 
   // Obtén los hijos (alumnos) del padre y sus asistencias
   useEffect(() => {
@@ -81,7 +114,6 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     fetch(`http://localhost:8000/api/reports/padres/${userEmail}/alumnos/`)
       .then(res => res.json())
       .then(data => {
-        console.log('Datos recibidos del backend:', data);
         const alumnos: Student[] = data.alumnos.map((alumno: any) => ({
           id: alumno.id,
           name: alumno.name,
@@ -89,8 +121,6 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
           photo: alumno.photo || "👧",
           attendance: alumno.attendance
         }));
-        console.log('Alumnos procesados:', alumnos);
-        console.log('Attendance del primer alumno:', alumnos[0]?.attendance);
         setStudents(alumnos);
         setLoading(false);
         
@@ -100,6 +130,26 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
         }
       })
       .catch(() => setLoading(false));
+  }, [userEmail]);
+
+  // Cargar preferencias del padre
+  useEffect(() => {
+    fetch(`http://localhost:8000/api/reports/padres/${userEmail}/preferencias/`)
+      .then(res => res.json())
+      .then(data => {
+        setParentProfile({
+          telefono: data.telefono || "",
+          email: data.email || userEmail,
+          direccion: data.direccion || "",
+          notificaciones_email: data.notificaciones_email ?? true,
+          notificaciones_sms: data.notificaciones_sms ?? false,
+          notificar_asistencia: data.notificar_asistencia ?? true,
+          notificar_calificaciones: data.notificar_calificaciones ?? true,
+          notificar_comportamiento: data.notificar_comportamiento ?? true,
+          frecuencia_resumen: data.frecuencia_resumen || "semanal"
+        });
+      })
+      .catch(err => console.error('Error cargando preferencias:', err));
   }, [userEmail]);
 
   const loadStudentData = (studentId: string) => {
@@ -120,6 +170,30 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
       .then(res => res.json())
       .then(data => setComunicados(data.comunicados || []))
       .catch(err => console.error('Error cargando comunicados:', err));
+  };
+
+  const handleSaveSettings = async () => {
+    setProfileLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/api/reports/padres/${userEmail}/preferencias/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(parentProfile)
+      });
+
+      if (response.ok) {
+        setSettingsOpen(false);
+        // Aquí podrías mostrar un mensaje de éxito
+      } else {
+        console.error('Error al guardar preferencias');
+      }
+    } catch (err) {
+      console.error('Error al guardar preferencias:', err);
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
   const handleExport = (formato: 'pdf' | 'csv' | 'excel') => {
@@ -153,7 +227,6 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     
     // Si es "all", retornar todos los registros
     if (selectedPeriod === "all") {
-      console.log('Mostrando todos los registros:', student.attendance);
       return student.attendance;
     }
     
@@ -182,7 +255,6 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
       return new Date(record.date) >= filterDate;
     });
     
-    console.log(`Filtrado por ${selectedPeriod}: ${filtered.length} de ${student.attendance.length} registros`);
     return filtered;
   };
 
@@ -196,6 +268,139 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     attendanceRate: periodData.length > 0 ? Math.round(((periodData.filter(r => r.status === 'present' || r.status === 'late').length) / periodData.length) * 100) : 0,
     punctualityRate: periodData.filter(r => r.status === 'present' || r.status === 'late').length > 0 ? Math.round((periodData.filter(r => r.status === 'present').length / periodData.filter(r => r.status === 'present' || r.status === 'late').length) * 100) : 0
   };
+
+  // Calcular estadísticas de horarios
+  const getTimeStats = () => {
+    const presentWithTime = periodData.filter(r => r.status === 'present' && r.time);
+    const lateWithTime = periodData.filter(r => r.status === 'late' && r.time);
+    
+    if (presentWithTime.length === 0 && lateWithTime.length === 0) {
+      return {
+        avgArrivalTime: 'N/A',
+        earliestArrival: 'N/A',
+        latestArrival: 'N/A',
+        onTimeCount: stats.present,
+        lateCount: stats.late
+      };
+    }
+
+    const allTimes = [...presentWithTime, ...lateWithTime]
+      .map(r => r.time)
+      .filter(t => t)
+      .sort();
+
+    return {
+      avgArrivalTime: allTimes.length > 0 ? allTimes[Math.floor(allTimes.length / 2)] : 'N/A',
+      earliestArrival: allTimes[0] || 'N/A',
+      latestArrival: allTimes[allTimes.length - 1] || 'N/A',
+      onTimeCount: stats.present,
+      lateCount: stats.late
+    };
+  };
+
+  const timeStats = getTimeStats();
+
+  // Analizar patrones de asistencia y detectar problemas
+  const getAttendanceAnalysis = () => {
+    if (!student || !student.attendance || student.attendance.length === 0) {
+      return {
+        alerts: [],
+        insights: [],
+        status: 'unknown'
+      };
+    }
+
+    const alerts: { type: 'critical' | 'warning' | 'info', message: string, icon: string }[] = [];
+    const insights: string[] = [];
+
+    // Ordenar asistencias por fecha
+    const sortedAttendance = [...student.attendance].sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Detectar ausencias consecutivas
+    let consecutiveAbsences = 0;
+    let maxConsecutiveAbsences = 0;
+    let currentStreak = 0;
+
+    sortedAttendance.forEach((record, index) => {
+      if (record.status === 'absent') {
+        consecutiveAbsences++;
+        maxConsecutiveAbsences = Math.max(maxConsecutiveAbsences, consecutiveAbsences);
+      } else {
+        consecutiveAbsences = 0;
+      }
+    });
+
+    // Alertas críticas
+    if (maxConsecutiveAbsences >= 3) {
+      alerts.push({
+        type: 'critical',
+        message: `⚠️ Alerta Crítica: ${maxConsecutiveAbsences} días consecutivos de ausencia detectados`,
+        icon: '🚨'
+      });
+    }
+
+    if (stats.attendanceRate < 75) {
+      alerts.push({
+        type: 'critical',
+        message: `📉 Asistencia por debajo del 75%: Se requiere atención inmediata`,
+        icon: '⚠️'
+      });
+    }
+
+    // Advertencias
+    if (stats.late >= 5 && stats.attendanceRate >= 75) {
+      alerts.push({
+        type: 'warning',
+        message: `⏰ ${stats.late} tardanzas registradas: Revisar hábitos de puntualidad`,
+        icon: '⚡'
+      });
+    }
+
+    if (stats.absent >= 3 && stats.absent < stats.total * 0.25) {
+      alerts.push({
+        type: 'warning',
+        message: `📅 ${stats.absent} ausencias en el período: Monitorear tendencia`,
+        icon: '👁️'
+      });
+    }
+
+    // Insights positivos
+    if (stats.attendanceRate >= 95) {
+      alerts.push({
+        type: 'info',
+        message: `✨ Excelente asistencia: ${stats.attendanceRate}% de presencia`,
+        icon: '🌟'
+      });
+    }
+
+    if (stats.punctualityRate >= 90 && stats.present > 0) {
+      alerts.push({
+        type: 'info',
+        message: `⏱️ Puntualidad destacada: ${stats.punctualityRate}% llegadas a tiempo`,
+        icon: '👏'
+      });
+    }
+
+    // Si no hay alertas, todo está bien
+    if (alerts.length === 0) {
+      alerts.push({
+        type: 'info',
+        message: '✅ Asistencia dentro de parámetros normales',
+        icon: '👍'
+      });
+    }
+
+    return {
+      alerts,
+      insights,
+      status: alerts.some(a => a.type === 'critical') ? 'critical' : 
+              alerts.some(a => a.type === 'warning') ? 'warning' : 'good'
+    };
+  };
+
+  const attendanceAnalysis = getAttendanceAnalysis();
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -214,7 +419,12 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     if (!student || !student.attendance) {
       return null;
     }
-    const dateStr = date.toISOString().split('T')[0];
+    // Formatear fecha seleccionada a YYYY-MM-DD en zona horaria local
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
     const recordsForDate = student.attendance.filter(record => record.date === dateStr);
     
     if (recordsForDate.length === 0) return null;
@@ -229,7 +439,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     return recordsForDate[0]; // Retorna el primero si todos son presentes
   };
 
-  const selectedDateRecord = selectedDate ? getAttendanceForDate(selectedDate) : null;
+  const selectedDateRecord = getAttendanceForDate(selectedDate);
 
   // Función para obtener fechas únicas con su estado prioritario para el calendario
   const getCalendarDates = () => {
@@ -254,7 +464,9 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
       const hasAbsent = records.some(r => r.status === 'absent');
       const hasLate = records.some(r => r.status === 'late');
 
-      const date = new Date(dateStr);
+      // Crear fecha en zona horaria local (no UTC)
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const date = new Date(year, month - 1, day);
       
       if (hasAbsent) {
         absent.push(date);
@@ -286,7 +498,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
               <Button variant="ghost" size="sm">
                 <Bell className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" onClick={() => setSettingsOpen(true)}>
                 <Settings className="h-4 w-4" />
               </Button>
               <div className="flex items-center space-x-3">
@@ -375,76 +587,6 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
             </div>
           </div>
         </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">Días</CardTitle>
-              <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl">{stats.total}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">días escolares</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">Presentes</CardTitle>
-              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl text-green-600">{stats.present}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">días asistidos</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">Tardanzas</CardTitle>
-              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl text-yellow-600">{stats.late}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">llegadas tarde</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">Ausencias</CardTitle>
-              <XCircle className="h-3 w-3 sm:h-4 sm:w-4 text-red-600" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl text-red-600">{stats.absent}</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">días faltados</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">% Asistencia</CardTitle>
-              <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-blue-600" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl text-blue-600">{stats.attendanceRate}%</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">total período</p>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6">
-              <CardTitle className="text-xs sm:text-sm">% Puntualidad</CardTitle>
-              <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-purple-600" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <div className="text-xl sm:text-2xl text-purple-600">{stats.punctualityRate}%</div>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">llegadas a tiempo</p>
-            </CardContent>
-          </Card>
-        </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar */}
           <Card>
@@ -461,12 +603,15 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
               <Calendar
                 mode="single"
                 selected={selectedDate}
-                onSelect={setSelectedDate}
-                className="rounded-md border"
+                onSelect={(day) => day && setSelectedDate(day)}
+                className="rounded-md border w-full"
                 modifiers={{
                   present: calendarDates.present,
                   late: calendarDates.late,
                   absent: calendarDates.absent,
+                }}
+                modifiersClassNames={{
+                  selected: !selectedDateRecord ? 'bg-gray-400 text-white hover:bg-gray-400 ring-1 ring-gray-400 ring-offset-1' : ''
                 }}
                 modifiersStyles={{
                   present: { backgroundColor: '#dcfce7', color: '#166534' },
@@ -475,37 +620,44 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
                 }}
               />
               
-              {selectedDateRecord && (
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                  <h4 className="text-sm mb-2">Detalle del día seleccionado:</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span>Fecha:</span>
-                      <span className="font-medium">{selectedDate?.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Estado:</span>
-                      {getStatusBadge(selectedDateRecord.status)}
-                    </div>
-                    {selectedDateRecord.time && (
-                      <div className="flex justify-between">
-                        <span>Hora:</span>
-                        <span>{selectedDateRecord.time}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                    </div>
-                    {selectedDateRecord.observations && (
-                      <div className="mt-2">
-                        <span className="text-xs text-gray-600">Observaciones:</span>
-                        <p className="text-xs mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                          {selectedDateRecord.observations}
-                        </p>
-                      </div>
-                    )}
+              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                <h4 className="text-sm mb-2">Detalle del día seleccionado:</h4>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span>Fecha:</span>
+                    <span className="font-medium">{selectedDate.toLocaleDateString('es-PE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
                   </div>
+                  {selectedDateRecord ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Estado:</span>
+                        {getStatusBadge(selectedDateRecord.status)}
+                      </div>
+                      {selectedDateRecord.time && (
+                        <div className="flex justify-between">
+                          <span>Hora:</span>
+                          <span>{selectedDateRecord.time}</span>
+                        </div>
+                      )}
+                      {selectedDateRecord.observations && (
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-600">Observaciones:</span>
+                          <p className="text-xs mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                            {selectedDateRecord.observations}
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex justify-between items-center">
+                      <span>Estado:</span>
+                      <Badge variant="outline" className="bg-gray-100 text-gray-600 border-gray-300">
+                        No hay registro
+                      </Badge>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
 
@@ -521,7 +673,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
+              <div className="space-y-3 h-[500px] overflow-y-auto">
                 {periodData.reverse().map((record, index) => (
                   <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
@@ -553,103 +705,460 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
           </Card>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <Card>
+        {/* Analytics Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+          {/* Attendance Chart */}
+          <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-lg">Rendimiento Académico</CardTitle>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                Gráfica de Asistencia
+              </CardTitle>
+              <CardDescription>
+                Evolución de la asistencia en el período seleccionado
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {calificaciones ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Promedio General:</span>
-                    <span className="text-green-600">{calificaciones.promedio_general}</span>
+              <div className="space-y-6 p-4">
+                {/* Chart Tabs */}
+                <Tabs defaultValue="pie" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="pie">Gráfico Circular</TabsTrigger>
+                    <TabsTrigger value="bar">Gráfico de Barras</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="pie" className="mt-4">
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Presentes', value: stats.present, color: '#22c55e' },
+                              { name: 'Tardanzas', value: stats.late, color: '#eab308' },
+                              { name: 'Ausencias', value: stats.absent, color: '#ef4444' }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {[
+                              { name: 'Presentes', value: stats.present, color: '#22c55e' },
+                              { name: 'Tardanzas', value: stats.late, color: '#eab308' },
+                              { name: 'Ausencias', value: stats.absent, color: '#ef4444' }
+                            ].map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="bar" className="mt-4">
+                    <div className="h-[250px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={[
+                            { name: 'Presentes', value: stats.present, fill: '#22c55e' },
+                            { name: 'Tardanzas', value: stats.late, fill: '#eab308' },
+                            { name: 'Ausencias', value: stats.absent, fill: '#ef4444' }
+                          ]}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="value" radius={[8, 8, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </TabsContent>
+                </Tabs>
+                
+                {/* Time Statistics */}
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Análisis de Horarios
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white p-3 rounded-md">
+                      <span className="text-xs text-gray-600 block mb-1">Hora más temprana</span>
+                      <div className="text-lg font-bold text-green-700">{timeStats.earliestArrival}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-md">
+                      <span className="text-xs text-gray-600 block mb-1">Hora más tardía</span>
+                      <div className="text-lg font-bold text-orange-700">{timeStats.latestArrival}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-md">
+                      <span className="text-xs text-gray-600 block mb-1">Hora promedio</span>
+                      <div className="text-lg font-bold text-blue-700">{timeStats.avgArrivalTime}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded-md">
+                      <span className="text-xs text-gray-600 block mb-1">Puntualidad</span>
+                      <div className="text-lg font-bold text-purple-700">{stats.punctualityRate}%</div>
+                    </div>
                   </div>
-                  {calificaciones.cursos.map((curso, idx) => (
-                    <div key={idx} className="flex justify-between">
-                      <span>{curso.nombre}:</span>
-                      <span>{curso.nota}</span>
+                </div>
+
+                {/* Attendance Rate */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-700">Rango de Asistencia</span>
+                    <Badge className={`${
+                      stats.attendanceRate >= 90 ? 'bg-green-100 text-green-800 border-green-300' :
+                      stats.attendanceRate >= 75 ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                      'bg-red-100 text-red-800 border-red-300'
+                    }`}>
+                      {stats.attendanceRate >= 90 ? 'Excelente' :
+                       stats.attendanceRate >= 75 ? 'Bueno' :
+                       stats.attendanceRate >= 60 ? 'Regular' :
+                       'Requiere Atención'}
+                    </Badge>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-4">
+                    <div 
+                      className={`h-4 rounded-full transition-all shadow-sm ${
+                        stats.attendanceRate >= 90 ? 'bg-green-500' :
+                        stats.attendanceRate >= 75 ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`}
+                      style={{ width: `${stats.attendanceRate}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-4xl font-bold text-blue-600">{stats.attendanceRate}%</span>
+                    <p className="text-xs text-gray-500 mt-1">Asistencia total del período</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* AI Analysis Placeholder */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                Detector de Asistencia
+              </CardTitle>
+              <CardDescription>
+                Análisis automático de patrones
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 h-[calc(100%-2rem)]">
+                {/* Status Indicator */}
+                <div className={`p-3 rounded-lg border-2 ${
+                  attendanceAnalysis.status === 'critical' ? 'bg-red-50 border-red-300' :
+                  attendanceAnalysis.status === 'warning' ? 'bg-yellow-50 border-yellow-300' :
+                  'bg-green-50 border-green-300'
+                }`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`text-xl ${
+                      attendanceAnalysis.status === 'critical' ? 'animate-pulse' : ''
+                    }`}>
+                      {attendanceAnalysis.status === 'critical' ? '🚨' :
+                       attendanceAnalysis.status === 'warning' ? '⚠️' :
+                       '✅'}
+                    </div>
+                    <h4 className={`font-semibold text-sm ${
+                      attendanceAnalysis.status === 'critical' ? 'text-red-800' :
+                      attendanceAnalysis.status === 'warning' ? 'text-yellow-800' :
+                      'text-green-800'
+                    }`}>
+                      {attendanceAnalysis.status === 'critical' ? 'Atención Requerida' :
+                       attendanceAnalysis.status === 'warning' ? 'Vigilar Situación' :
+                       'Todo en Orden'}
+                    </h4>
+                  </div>
+                  <p className="text-xs text-gray-600">
+                    {attendanceAnalysis.status === 'critical' ? 'Se detectaron problemas que requieren atención inmediata' :
+                     attendanceAnalysis.status === 'warning' ? 'Hay aspectos que requieren seguimiento' :
+                     'El patrón de asistencia es satisfactorio'}
+                  </p>
+                </div>
+
+                {/* Alerts List */}
+                <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                  {attendanceAnalysis.alerts.map((alert, index) => (
+                    <div 
+                      key={index}
+                      className={`p-2.5 rounded-lg border ${
+                        alert.type === 'critical' ? 'bg-red-50 border-red-200' :
+                        alert.type === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                        'bg-blue-50 border-blue-200'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-base">{alert.icon}</span>
+                        <p className={`text-xs flex-1 leading-relaxed ${
+                          alert.type === 'critical' ? 'text-red-800' :
+                          alert.type === 'warning' ? 'text-yellow-800' :
+                          'text-blue-800'
+                        }`}>
+                          {alert.message}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500">Cargando calificaciones...</p>
-              )}
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Comportamiento</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {comportamiento ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Conducta:</span>
-                    <span className="text-green-600">{comportamiento.conducta}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Participación:</span>
-                    <span className="text-green-600">{comportamiento.participacion}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Trabajo en equipo:</span>
-                    <span className="text-green-600">{comportamiento.trabajo_equipo}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Puntualidad tareas:</span>
-                    <span className="text-yellow-600">{comportamiento.puntualidad_tareas}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Responsabilidad:</span>
-                    <span className="text-green-600">{comportamiento.responsabilidad}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Respeto:</span>
-                    <span className="text-green-600">{comportamiento.respeto}</span>
+                {/* Quick Stats */}
+                <div className="pt-2 border-t border-gray-200">
+                  <h5 className="text-xs font-semibold text-gray-700 mb-2">Resumen Rápido</h5>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-gray-600">Total días:</span>
+                      <span className="font-semibold">{stats.total}</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-gray-600">Tasa asist.:</span>
+                      <span className="font-semibold">{stats.attendanceRate}%</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-gray-600">Ausencias:</span>
+                      <span className="font-semibold text-red-600">{stats.absent}</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-gray-50 rounded">
+                      <span className="text-gray-600">Tardanzas:</span>
+                      <span className="font-semibold text-yellow-600">{stats.late}</span>
+                    </div>
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-gray-500">Cargando comportamiento...</p>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Comunicados Recientes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {comunicados.length > 0 ? (
-                <div className="space-y-2 text-sm">
-                  {comunicados.map((com, idx) => {
-                    const bgColor = 
-                      com.tipo === 'success' ? 'bg-green-50 border-green-200' :
-                      com.tipo === 'warning' ? 'bg-yellow-50 border-yellow-200' :
-                      com.tipo === 'info' ? 'bg-blue-50 border-blue-200' :
-                      'bg-gray-50 border-gray-200';
-                    
-                    const emoji = 
-                      com.tipo === 'success' ? '🎉' :
-                      com.tipo === 'warning' ? '📚' :
-                      '📝';
-                    
-                    return (
-                      <div key={idx} className={`p-2 border rounded ${bgColor}`}>
-                        {emoji} {com.fecha && <strong>{com.fecha}:</strong>} {com.mensaje}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No hay comunicados recientes</p>
-              )}
+              </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Comunicados Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Comunicados Recientes
+            </CardTitle>
+            <CardDescription>
+              Mensajes importantes de la institución
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {comunicados.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {comunicados.map((com, idx) => {
+                  const bgColor = 
+                    com.tipo === 'success' ? 'bg-green-50 border-green-200' :
+                    com.tipo === 'warning' ? 'bg-yellow-50 border-yellow-200' :
+                    com.tipo === 'info' ? 'bg-blue-50 border-blue-200' :
+                    'bg-gray-50 border-gray-200';
+                  
+                  const emoji = 
+                    com.tipo === 'success' ? '🎉' :
+                    com.tipo === 'warning' ? '📚' :
+                    '📝';
+                  
+                  return (
+                    <div key={idx} className={`p-3 border rounded-lg ${bgColor}`}>
+                      <div className="flex items-start gap-2">
+                        <span className="text-xl">{emoji}</span>
+                        <div className="flex-1">
+                          {com.fecha && <div className="text-xs font-semibold mb-1">{com.fecha}</div>}
+                          <p className="text-sm">{com.mensaje}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-sm text-gray-500">No hay comunicados recientes</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configuración de Cuenta
+            </DialogTitle>
+            <DialogDescription>
+              Actualiza tus datos de contacto y preferencias de notificación
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6 py-4">
+            {/* Datos de Contacto */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Datos de Contacto
+              </h3>
+              
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="telefono" className="flex items-center gap-2">
+                    <Phone className="h-3 w-3" />
+                    Teléfono
+                  </Label>
+                  <Input
+                    id="telefono"
+                    type="tel"
+                    placeholder="+51 999 999 999"
+                    value={parentProfile.telefono}
+                    onChange={(e) => setParentProfile({...parentProfile, telefono: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="email" className="flex items-center gap-2">
+                    <Mail className="h-3 w-3" />
+                    Email
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={parentProfile.email}
+                    onChange={(e) => setParentProfile({...parentProfile, email: e.target.value})}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="direccion" className="flex items-center gap-2">
+                    <MapPin className="h-3 w-3" />
+                    Dirección
+                  </Label>
+                  <Input
+                    id="direccion"
+                    type="text"
+                    placeholder="Av. Principal 123, Distrito, Ciudad"
+                    value={parentProfile.direccion}
+                    onChange={(e) => setParentProfile({...parentProfile, direccion: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Preferencias de Notificación */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Preferencias de Notificación
+              </h3>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="notif-email" className="font-medium">Notificaciones por Email</Label>
+                    <p className="text-xs text-gray-500">Recibir notificaciones en tu correo electrónico</p>
+                  </div>
+                  <Switch
+                    id="notif-email"
+                    checked={parentProfile.notificaciones_email}
+                    onCheckedChange={(checked) => setParentProfile({...parentProfile, notificaciones_email: checked})}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="notif-sms" className="font-medium">Notificaciones por SMS</Label>
+                    <p className="text-xs text-gray-500">Recibir notificaciones por mensaje de texto</p>
+                  </div>
+                  <Switch
+                    id="notif-sms"
+                    checked={parentProfile.notificaciones_sms}
+                    onCheckedChange={(checked) => setParentProfile({...parentProfile, notificaciones_sms: checked})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Tipos de Alertas */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="h-4 w-4" />
+                Tipos de Alertas
+              </h3>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="notif-asistencia" className="font-medium">Asistencia</Label>
+                    <p className="text-xs text-gray-500">Notificar sobre ausencias y tardanzas</p>
+                  </div>
+                  <Switch
+                    id="notif-asistencia"
+                    checked={parentProfile.notificar_asistencia}
+                    onCheckedChange={(checked) => setParentProfile({...parentProfile, notificar_asistencia: checked})}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="notif-calificaciones" className="font-medium">Calificaciones</Label>
+                    <p className="text-xs text-gray-500">Notificar sobre nuevas calificaciones</p>
+                  </div>
+                  <Switch
+                    id="notif-calificaciones"
+                    checked={parentProfile.notificar_calificaciones}
+                    onCheckedChange={(checked) => setParentProfile({...parentProfile, notificar_calificaciones: checked})}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label htmlFor="notif-comportamiento" className="font-medium">Comportamiento</Label>
+                    <p className="text-xs text-gray-500">Notificar sobre observaciones de conducta</p>
+                  </div>
+                  <Switch
+                    id="notif-comportamiento"
+                    checked={parentProfile.notificar_comportamiento}
+                    onCheckedChange={(checked) => setParentProfile({...parentProfile, notificar_comportamiento: checked})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Frecuencia de Resumen */}
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900">Frecuencia de Resumen</h3>
+              <div className="grid gap-2">
+                <Label htmlFor="frecuencia">Recibir resumen completo cada:</Label>
+                <select
+                  id="frecuencia"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={parentProfile.frecuencia_resumen}
+                  onChange={(e) => setParentProfile({...parentProfile, frecuencia_resumen: e.target.value as 'diario' | 'semanal' | 'mensual'})}
+                >
+                  <option value="diario">Diario</option>
+                  <option value="semanal">Semanal</option>
+                  <option value="mensual">Mensual</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSettingsOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveSettings} disabled={profileLoading}>
+              {profileLoading ? "Guardando..." : "Guardar Cambios"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

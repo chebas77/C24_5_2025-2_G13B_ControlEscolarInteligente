@@ -149,3 +149,19 @@ class Comunicado(models.Model):
     class Meta:
         db_table = 'comunicado'
         managed = False
+
+class PreferenciasPadre(models.Model):
+    pk_preferencia = models.AutoField(primary_key=True, db_column='pk_preferencia')
+    fk_padre = models.OneToOneField(Padre, on_delete=models.CASCADE, db_column='fk_padre', related_name='preferencias')
+    telefono = models.CharField(max_length=20, null=True, blank=True)
+    direccion = models.CharField(max_length=200, null=True, blank=True)
+    notificaciones_email = models.BooleanField(default=True)
+    notificaciones_sms = models.BooleanField(default=False)
+    notificar_asistencia = models.BooleanField(default=True)
+    notificar_calificaciones = models.BooleanField(default=True)
+    notificar_comportamiento = models.BooleanField(default=True)
+    frecuencia_resumen = models.CharField(max_length=20, default='semanal')  # 'diario', 'semanal', 'mensual'
+    
+    class Meta:
+        db_table = 'preferencias_padre'
+        managed = False

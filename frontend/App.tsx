@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Navigation from './app/components/Navigation';
 import LandingPage from './app/components/LandingPage';
@@ -28,6 +28,36 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<UserRole>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Cargar sesión desde localStorage al montar el componente
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('auth');
+    if (savedAuth) {
+      try {
+        const { email, role, page } = JSON.parse(savedAuth);
+        setUserEmail(email);
+        setUserRole(role);
+        setIsAuthenticated(true);
+        setCurrentPage(page);
+      } catch (error) {
+        console.error('Error al cargar sesión:', error);
+        localStorage.removeItem('auth');
+      }
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Guardar sesión en localStorage cuando cambie
+  useEffect(() => {
+    if (isAuthenticated && userEmail && userRole) {
+      localStorage.setItem('auth', JSON.stringify({
+        email: userEmail,
+        role: userRole,
+        page: currentPage
+      }));
+    }
+  }, [isAuthenticated, userEmail, userRole, currentPage]);
 
   const handleNavigation = (page: string) => {
     setCurrentPage(page as Page);
@@ -66,7 +96,20 @@ export default function App() {
     setUserEmail('');
     setUserRole(null);
     setCurrentPage('home');
+    localStorage.removeItem('auth');
   };
+
+  // Mostrar loading mientras carga la sesión
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
 
   const renderPage = () => {
     switch (currentPage) {
