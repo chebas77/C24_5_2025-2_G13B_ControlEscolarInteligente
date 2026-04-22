@@ -123,20 +123,26 @@ class PadreAlumnosView(APIView):
                     if detalle.fk_asistencia and detalle.fk_asistencia.fecha:
                         fecha_str = str(detalle.fk_asistencia.fecha)
                     
-                    time_str = None
+                    time_entrada = None
                     if detalle.hora_entrada:
-                        time_str = str(detalle.hora_entrada)
+                        time_entrada = str(detalle.hora_entrada)
+                    
+                    time_salida = None
+                    if detalle.fk_asistencia and detalle.fk_asistencia.hora_fin:
+                        time_salida = str(detalle.fk_asistencia.hora_fin)
                     
                     record = {
                         'date': fecha_str,
                         'status': status,
-                        'time': time_str,
+                        'time': time_entrada,
+                        'time_entrada': time_entrada,
+                        'time_salida': time_salida,
                         'teacher': teacher_name,
                         'course': curso,
                         'observations': detalle.observacion or ''
                     }
                     
-                    print(f"  Registro asistencia: fecha={fecha_str}, estado={detalle.estado_asistencia}, status={status}, hora={time_str}")
+                    print(f"  Registro asistencia: fecha={fecha_str}, estado={detalle.estado_asistencia}, status={status}, entrada={time_entrada}, salida={time_salida}")
                     attendance.append(record)
                 
                 alumnos_data.append({

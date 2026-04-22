@@ -1,15 +1,17 @@
+"use client";
+
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Button } from "../ui/button";
-import { Label } from "../ui/label";
-import { Slider } from "../ui/slider";
-import { Switch } from "../ui/switch";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Label } from "@/app/components/ui/label";
+import { Slider } from "@/app/components/ui/slider";
+import { Switch } from "@/app/components/ui/switch";
 import { 
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../ui/tooltip";
+} from "@/app/components/ui/tooltip";
 import { 
   Settings, 
   AlertCircle, 

@@ -62,6 +62,8 @@ cd C24_5_2025-2_G13B_ControlEscolarInteligente/backend
 
 ### 🐍 2. Crear y activar el entorno virtual
 
+Recomendado: usar Python `3.13` o `3.12`.
+
 **En Windows (PowerShell o Git Bash):**
 ```bash
 python -m venv venv
@@ -80,7 +82,8 @@ Desde la carpeta `backend/src` (donde se encuentra `manage.py`):
 
 ```bash
 cd src
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
 ### 🛠️ 4. Aplicar migraciones de base de datos
@@ -90,6 +93,28 @@ Esto creará las tablas necesarias para usuarios, sesiones y el panel administra
 ```bash
 python manage.py migrate
 ```
+
+### 👥 4.1 Cargar usuarios demo para pruebas
+
+Para simular datos de administradores, profesores, padres y alumnos:
+
+```bash
+python manage.py seed_demo_users --count 20 --reset
+```
+
+Este comando crea como minimo:
+
+- 20 administradores
+- 20 profesores
+- 20 padres de familia
+- 20 alumnos
+- familias, preferencias, asistencias y metricas faciales demo en `alumno_metrics`
+
+Datos utiles para pruebas:
+
+- Password demo de usuarios `auth.User`: `DemoSCEI2026!`
+- Padres: `padre001@demo.scei.pe` hasta `padre020@demo.scei.pe`
+- DNI del hijo para login del padre: `50000001` hasta `50000020`
 
 ### 👤 5. Crear superusuario (opcional)
 

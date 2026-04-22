@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 interface GoogleLoginProps {
-  onLogin: (email: string, role: 'admin' | 'admin-mujeres' | 'teacher' | 'parent', dniHijo?: string, accessToken?: string) => void;
+  onLogin: (email: string, role: 'admin' | 'admin-mujeres' | 'teacher' | 'parent', dniHijo?: string, accessToken?: string) => void | Promise<void>;
   onBack: () => void;
 }
 
@@ -51,7 +51,7 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
       // Simular éxito de autenticación
       onLogin(randomEmail, role);
       
-    } catch (err) {
+    } catch {
       setError('Error al autenticar con Google. Por favor, intente nuevamente.');
     } finally {
       setIsLoading(false);
@@ -70,20 +70,9 @@ export function GoogleLogin({ onLogin, onBack }: GoogleLoginProps) {
     setParentLoading(true);
     setParentError("");
     try {
-      const res = await fetch("http://localhost:8000/api/reports/padres/login/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: parentEmail, dni_hijo: dniHijo })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem("accessToken", data.access);
-        onLogin(parentEmail, "parent", dniHijo, data.access);
-      } else {
-        setParentError("Credenciales incorrectas.");
-      }
+      await onLogin(parentEmail, "parent", dniHijo);
     } catch {
-      setParentError("Error al conectar al servidor.");
+      setParentError("No se pudo iniciar sesión.");
     } finally {
       setParentLoading(false);
     }

@@ -1,5 +1,5 @@
-import App from "../App"; 
+import LandingModule from "../modules/Main/Landing";
 
 export default function Page() {
-  return <App />;
+  return <LandingModule />;
 }
