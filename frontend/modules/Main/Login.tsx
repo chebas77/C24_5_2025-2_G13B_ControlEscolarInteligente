@@ -1,7 +1,5 @@
 "use client";
 
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
@@ -10,6 +8,12 @@ import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { AuthStorageService, BasicAuthService, RoleRouteResolver } from "@/core/auth";
 import PublicLayout from "./PublicLayout";
+
+interface QuickAccessUser {
+  email: string;
+  label: string;
+  dniHijo?: string;
+}
 
 export function LoginModule() {
   const router = useRouter();
@@ -29,28 +33,28 @@ export function LoginModule() {
     }
   }, [authStorage, routeResolver, router]);
 
-  const demoSections = [
+  const demoSections: Array<{ title: string; users: QuickAccessUser[] }> = [
     {
-      title: "Administración",
+      title: "Administracion",
       users: [
-        { email: "admin.varones@gmail.com", label: "Admin varones" },
-        { email: "director.varones@gmail.com", label: "Director varones" },
-        { email: "admin.mujeres@gmail.com", label: "Admin mujeres" },
-        { email: "directora.mujeres@gmail.com", label: "Directora mujeres" },
+        { email: "admin001@demo.scei.pe", label: "Admin varones" },
+        { email: "admin002@demo.scei.pe", label: "Director varones" },
+        { email: "admin.mujeres001@demo.scei.pe", label: "Admin mujeres" },
+        { email: "admin.mujeres002@demo.scei.pe", label: "Directora mujeres" },
       ],
     },
     {
       title: "Docentes",
       users: [
-        { email: "profesor.silva@gmail.com", label: "Profesor Silva" },
-        { email: "profesor.martinez@gmail.com", label: "Profesor Martínez" },
+        { email: "profesor001@demo.scei.pe", label: "Profesor Silva" },
+        { email: "profesor002@demo.scei.pe", label: "Profesor Martinez" },
       ],
     },
     {
       title: "Padres",
       users: [
-        { email: "padre.garcia@gmail.com", label: "Padre García" },
-        { email: "madre.rodriguez@gmail.com", label: "Madre Rodríguez" },
+        { email: "padre001@demo.scei.pe", label: "Padre Garcia", dniHijo: "50000001" },
+        { email: "padre002@demo.scei.pe", label: "Madre Rodriguez", dniHijo: "50000002" },
       ],
     },
   ];
@@ -64,10 +68,31 @@ export function LoginModule() {
       authStorage.save(session);
       router.push(routeResolver.resolveHomeByRole(session.role));
     } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesión.");
+      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion.");
     } finally {
       setLoadingEmail(null);
     }
+  };
+
+  const navigateWithQuickAccess = async (user: QuickAccessUser) => {
+    if (user.dniHijo) {
+      setError("");
+      setLoadingEmail(user.email);
+
+      try {
+        const session = await authService.loginParent({ email: user.email, dniHijo: user.dniHijo });
+        authStorage.save(session);
+        router.push(routeResolver.resolveHomeByRole(session.role));
+      } catch (currentError) {
+        setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion.");
+      } finally {
+        setLoadingEmail(null);
+      }
+
+      return;
+    }
+
+    await navigateWithSession(user.email);
   };
 
   const loginWithRandomGoogle = async () => {
@@ -79,7 +104,7 @@ export function LoginModule() {
       authStorage.save(session);
       router.push(routeResolver.resolveHomeByRole(session.role));
     } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesión.");
+      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion.");
     } finally {
       setLoadingEmail(null);
     }
@@ -95,7 +120,7 @@ export function LoginModule() {
       authStorage.save(session);
       router.push(routeResolver.resolveHomeByRole(session.role));
     } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesión.");
+      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion.");
     } finally {
       setParentLoading(false);
     }
@@ -109,30 +134,29 @@ export function LoginModule() {
             Acceso modular
           </span>
           <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
-            Un login más claro para entrar a cada módulo sin mezclar toda la app en una sola pantalla.
+            Un login mas claro para entrar a cada modulo sin mezclar toda la app en una sola pantalla.
           </h1>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-600">
-            Esta versión ordena el acceso por roles, separa mejor el login demo del acceso de padres
-            para trabajar directamente desde el inicio de sesión.
+            Esta version ordena el acceso por roles y conecta los accesos rapidos con usuarios demo reales.
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-medium text-slate-900">Index</h2>
-              <p className="mt-2 text-sm text-slate-600">Pantalla inicial y presentación institucional.</p>
+              <p className="mt-2 text-sm text-slate-600">Pantalla inicial y presentacion institucional.</p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-medium text-slate-900">About</h2>
-              <p className="mt-2 text-sm text-slate-600">Información de la institución y propuesta educativa.</p>
+              <p className="mt-2 text-sm text-slate-600">Informacion de la institucion y propuesta educativa.</p>
             </div>
           </div>
         </div>
 
         <Card className="border-slate-200 shadow-xl shadow-red-100/30">
           <CardHeader>
-            <CardTitle>Iniciar sesión</CardTitle>
+            <CardTitle>Iniciar sesion</CardTitle>
             <CardDescription>
-              Selecciona una ruta de acceso rápida o autentica a un padre con correo y DNI.
+              Selecciona una ruta de acceso rapida o autentica a un padre con correo y DNI.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -153,9 +177,7 @@ export function LoginModule() {
             <div className="space-y-5">
               {demoSections.map((section) => (
                 <div key={section.title} className="space-y-2">
-                  <h3 className="text-sm font-medium uppercase tracking-wide text-slate-500">
-                    {section.title}
-                  </h3>
+                  <h3 className="text-sm font-medium uppercase tracking-wide text-slate-500">{section.title}</h3>
                   <div className="grid gap-2">
                     {section.users.map((user) => (
                       <Button
@@ -163,7 +185,7 @@ export function LoginModule() {
                         type="button"
                         variant="outline"
                         className="justify-between border-slate-200 text-left hover:border-red-200 hover:bg-red-50"
-                        onClick={() => navigateWithSession(user.email)}
+                        onClick={() => navigateWithQuickAccess(user)}
                         disabled={loadingEmail === user.email}
                       >
                         <span>{user.label}</span>
@@ -201,11 +223,7 @@ export function LoginModule() {
                     required
                   />
                 </div>
-                <Button
-                  type="submit"
-                  disabled={parentLoading}
-                  className="w-full bg-red-600 hover:bg-red-700"
-                >
+                <Button type="submit" disabled={parentLoading} className="w-full bg-red-600 hover:bg-red-700">
                   {parentLoading ? "Validando acceso..." : "Ingresar como padre o madre"}
                 </Button>
               </form>

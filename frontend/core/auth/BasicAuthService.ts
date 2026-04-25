@@ -2,19 +2,16 @@ import { AuthSession } from "./AuthSession";
 import type { ParentLoginPayload, UserRole } from "./types";
 
 export class BasicAuthService {
-  private readonly allowedDomains = ["@gmail.com", "@feyalegria39.edu.pe"];
+  private readonly allowedDomains = ["@gmail.com", "@feyalegria39.edu.pe", "@demo.scei.pe"];
 
   private readonly demoUsers: Record<string, UserRole> = {
-    "admin.varones@gmail.com": "admin",
-    "director.varones@gmail.com": "admin",
-    "admin.mujeres@gmail.com": "admin-mujeres",
-    "directora.mujeres@gmail.com": "admin-mujeres",
-    "profesor.silva@gmail.com": "teacher",
-    "profesor.martinez@gmail.com": "teacher",
-    "profesor.lopez@gmail.com": "teacher",
-    "padre.garcia@gmail.com": "parent",
-    "madre.rodriguez@gmail.com": "parent",
-    "tutor.mendoza@gmail.com": "parent",
+    "admin001@demo.scei.pe": "admin",
+    "admin002@demo.scei.pe": "admin",
+    "admin.mujeres001@demo.scei.pe": "admin-mujeres",
+    "admin.mujeres002@demo.scei.pe": "admin-mujeres",
+    "profesor001@demo.scei.pe": "teacher",
+    "profesor002@demo.scei.pe": "teacher",
+    "profesor003@demo.scei.pe": "teacher",
   };
 
   public getDemoUsers(): Record<string, UserRole> {

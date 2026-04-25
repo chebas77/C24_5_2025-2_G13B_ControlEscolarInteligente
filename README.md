@@ -116,6 +116,19 @@ Datos utiles para pruebas:
 - Padres: `padre001@demo.scei.pe` hasta `padre020@demo.scei.pe`
 - DNI del hijo para login del padre: `50000001` hasta `50000020`
 
+Para agregar 30 alumnos extra conectados a los profesores visibles en el login:
+
+```bash
+python manage.py seed_teacher_students --count 30 --days 30 --reset
+```
+
+Este seed llena las aulas `1ro-A` y `2do-B`, usadas por:
+
+- `profesor001@demo.scei.pe`
+- `profesor002@demo.scei.pe`
+
+Tambien genera asistencia variada solo para los ultimos 30 dias.
+
 ### 👤 5. Crear superusuario (opcional)
 
 Si deseas acceder al panel de administración:

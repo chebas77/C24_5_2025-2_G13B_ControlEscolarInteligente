@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { AuthStorageService, RoleRouteResolver, type UserRole } from "@/core/auth";
+import { AuthSession, AuthStorageService, RoleRouteResolver, type UserRole } from "@/core/auth";
 
 interface ProtectedModuleProps {
   allowedRole: UserRole;
@@ -14,25 +14,30 @@ export function ProtectedModule({ allowedRole, children }: ProtectedModuleProps)
   const router = useRouter();
   const authStorage = useMemo(() => new AuthStorageService(), []);
   const routeResolver = useMemo(() => new RoleRouteResolver(), []);
-  const session = useMemo(() => authStorage.load(), [authStorage]);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
-    if (!session) {
+    const storedSession = authStorage.load();
+    setSession(storedSession);
+    setIsCheckingSession(false);
+
+    if (!storedSession) {
       router.replace("/login");
       return;
     }
 
-    if (session.role !== allowedRole) {
-      router.replace(routeResolver.resolveHomeByRole(session.role));
+    if (storedSession.role !== allowedRole) {
+      router.replace(routeResolver.resolveHomeByRole(storedSession.role));
     }
-  }, [allowedRole, routeResolver, router, session]);
+  }, [allowedRole, authStorage, routeResolver, router]);
 
   const handleLogout = () => {
     authStorage.clear();
     router.replace("/login");
   };
 
-  if (!session || session.role !== allowedRole) {
+  if (isCheckingSession || !session || session.role !== allowedRole) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
