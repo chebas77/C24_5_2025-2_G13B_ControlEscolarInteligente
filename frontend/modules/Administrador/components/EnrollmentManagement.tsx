@@ -1,11 +1,13 @@
 // PUESTOS DE ENRROLLAMIENTO
 
+"use client";
+
 import { useState } from "react";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
-import { Badge } from "../ui/badge";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
+import { Button } from "@/app/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
+import { Badge } from "@/app/components/ui/badge";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
 import { 
   Table,
   TableBody,
@@ -13,7 +15,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "../ui/table";
+} from "@/app/components/ui/table";
 import { 
   Dialog,
   DialogContent,
@@ -21,7 +23,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "../ui/dialog";
+} from "@/app/components/ui/dialog";
 import { 
   UserCheck, 
   Upload, 

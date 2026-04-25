@@ -1,13 +1,15 @@
+"use client";
+
 import { useState } from "react";
-import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
-import { AttendanceDashboard } from "./admin/AttendanceDashboard";
-import { DevicesList } from "./admin/DevicesList";
-import { CaptureStation } from "./admin/CaptureStation";
-import { EnrollmentManagement } from "./admin/EnrollmentManagement";
-import { PoliciesSettings } from "./admin/PoliciesSettings";
-import { ReportsModule } from "./admin/ReportsModule";
+import { Button } from "@/app/components/ui/button";
+import { Badge } from "@/app/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import { AttendanceDashboard } from "@/modules/Administrador/components/AttendanceDashboard";
+import { DevicesList } from "@/modules/Administrador/components/DevicesList";
+import { CaptureStation } from "@/modules/Administrador/components/CaptureStation";
+import { EnrollmentManagement } from "@/modules/Administrador/components/EnrollmentManagement";
+import { PoliciesSettings } from "@/modules/Administrador/components/PoliciesSettings";
+import { ReportsModule } from "@/modules/Administrador/components/ReportsModule";
 import { 
   LogOut, 
   Camera, 
@@ -26,7 +28,7 @@ interface DashboardProps {
 
 type View = 'dashboard' | 'devices' | 'capture' | 'enrollment' | 'policies' | 'reports';
 
-export function Dashboard({ userEmail, onLogout }: DashboardProps) {
+export function AdminDashboard({ userEmail, onLogout }: DashboardProps) {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [selectedDevice, setSelectedDevice] = useState<string>('');
 
@@ -148,4 +150,4 @@ export function Dashboard({ userEmail, onLogout }: DashboardProps) {
   );
 }
 
-export default Dashboard;
+export default AdminDashboard;
