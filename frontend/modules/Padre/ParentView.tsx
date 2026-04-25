@@ -90,6 +90,26 @@ interface ParentViewProps {
   onLogout: () => void;
 }
 
+const toLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const parseLocalDate = (dateStr?: string): Date | null => {
+  if (!dateStr) {
+    return null;
+  }
+
+  const [year, month, day] = dateStr.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+};
+
 const buildFallbackStudent = (userEmail: string): Student => ({
   id: `local-${userEmail}`,
   name: "Alumno no vinculado",
@@ -123,28 +143,28 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
   // Obtén los hijos (alumnos) del padre y sus asistencias
   useEffect(() => {
     setLoading(true);
-    setStudents([buildFallbackStudent(userEmail)]);
-    setLoading(false);
-    return;
     fetch(`http://localhost:8000/api/reports/padres/${userEmail}/alumnos/`)
       .then(res => res.json())
       .then(data => {
-        const alumnos: Student[] = data.alumnos.map((alumno: Student) => ({
+        const alumnos: Student[] = (data.alumnos || []).map((alumno: Student) => ({
           id: alumno.id,
           name: alumno.name,
           grade: alumno.grade,
           photo: alumno.photo || "👧",
-          attendance: alumno.attendance
+          attendance: alumno.attendance || []
         }));
-        setStudents(alumnos);
-        setLoading(false);
-        
-        // Cargar datos adicionales del primer hijo
         if (alumnos.length > 0) {
+          setStudents(alumnos);
           loadStudentData(alumnos[0].id);
+        } else {
+          setStudents([buildFallbackStudent(userEmail)]);
         }
+        setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setStudents([buildFallbackStudent(userEmail)]);
+        setLoading(false);
+      });
   }, [userEmail]);
 
   // Cargar preferencias del padre
@@ -267,7 +287,8 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     
     const filtered = student.attendance.filter(record => {
       if (!record.date) return false;
-      return new Date(record.date) >= filterDate;
+      const parsedDate = parseLocalDate(record.date);
+      return parsedDate ? parsedDate >= filterDate : false;
     });
     
     return filtered;
@@ -432,11 +453,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
     if (!student || !student.attendance) {
       return null;
     }
-    // Formatear fecha seleccionada a YYYY-MM-DD en zona horaria local
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const dateStr = `${year}-${month}-${day}`;
+    const dateStr = toLocalDateKey(date);
     
     const recordsForDate = student.attendance.filter(record => record.date === dateStr);
     
@@ -478,8 +495,10 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
       const hasLate = records.some(r => r.status === 'late');
 
       // Crear fecha en zona horaria local (no UTC)
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const date = new Date(year, month - 1, day);
+      const date = parseLocalDate(dateStr);
+      if (!date) {
+        return;
+      }
       
       if (hasAbsent) {
         absent.push(date);
@@ -494,6 +513,11 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
   };
 
   const calendarDates = getCalendarDates();
+  const sortedPeriodData = [...periodData].sort((a, b) => {
+    const dateA = parseLocalDate(a.date)?.getTime() ?? 0;
+    const dateB = parseLocalDate(b.date)?.getTime() ?? 0;
+    return dateB - dateA;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -693,12 +717,21 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
             </CardHeader>
             <CardContent>
               <div className="space-y-3 h-[500px] overflow-y-auto">
-                {periodData.reverse().map((record, index) => (
+                {sortedPeriodData.map((record, index) => {
+                  const recordDate = parseLocalDate(record.date);
+                  const weekdayLabel = recordDate
+                    ? recordDate.toLocaleDateString('es-PE', { weekday: 'short' })
+                    : '--';
+                  const shortDateLabel = recordDate
+                    ? recordDate.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' })
+                    : '--/--';
+
+                  return (
                   <div key={index} className="grid grid-cols-[auto_1fr] gap-4 p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
                       <div className="text-center min-w-[60px]">
-                        <div className="text-sm">{new Date(record.date).toLocaleDateString('es-PE', { weekday: 'short' })}</div>
-                        <div className="text-xs text-gray-500">{new Date(record.date).toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit' })}</div>
+                        <div className="text-sm">{weekdayLabel}</div>
+                        <div className="text-xs text-gray-500">{shortDateLabel}</div>
                       </div>
                       <div className="flex items-center gap-3">
                         {getStatusBadge(record.status)}
@@ -742,7 +775,8 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
                       </p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

@@ -120,6 +120,16 @@ class AsistenciaDetalle(models.Model):
         db_table = 'asistencia_detalle'
         managed = False
 
+class Marcacion(models.Model):
+    pk_marcacion = models.AutoField(primary_key=True, db_column='pk_marcacion')
+    dni = models.CharField(max_length=12)
+    hora_marcacion = models.DateTimeField()
+    tipo_marcacion = models.CharField(max_length=30)
+
+    class Meta:
+        db_table = 'marcacion'
+        managed = False
+
 class NotificacionPadre(models.Model):
     pk_notificacion = models.AutoField(primary_key=True, db_column='pk_notificacion')
     fk_asistencia = models.ForeignKey(Asistencia, on_delete=models.CASCADE, db_column='fk_asistencia', null=True, blank=True)

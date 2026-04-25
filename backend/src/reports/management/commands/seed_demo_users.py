@@ -184,29 +184,23 @@ class Command(BaseCommand):
 
         roles: dict[str, Rol] = {}
         for name, description in role_descriptions.items():
-            role, _ = Rol.objects.get_or_create(
+            role, _ = Rol.objects.update_or_create(
                 nombre_rol=name,
                 defaults={"descripcion": description},
             )
-            if role.descripcion != description:
-                role.descripcion = description
-                role.save(update_fields=["descripcion"])
             roles[name] = role
         return roles
 
     def _ensure_families(self, count: int) -> list[CodigoFamilia]:
         families: list[CodigoFamilia] = []
         for index in range(1, count + 1):
-            family, _ = CodigoFamilia.objects.get_or_create(
+            family, _ = CodigoFamilia.objects.update_or_create(
                 codigo=f"FAM-{index:03d}",
                 defaults={
                     "direccion": f"Av. Demo {100 + index}, Lima",
                     "estado": "activo",
                 },
             )
-            family.direccion = family.direccion or f"Av. Demo {100 + index}, Lima"
-            family.estado = "activo"
-            family.save(update_fields=["direccion", "estado"])
             families.append(family)
 
             Autorizacion.objects.get_or_create(
@@ -378,33 +372,62 @@ class Command(BaseCommand):
         teacher_cycle = cycle(teachers)
         for index, student in enumerate(students, start=1):
             teacher = next(teacher_cycle)
-            attendance_date = date.today() - timedelta(days=index % 10)
-            attendance, _ = Asistencia.objects.update_or_create(
-                fk_personal=teacher,
-                fecha=attendance_date,
-                curso=teacher.especialidad or "Curso Demo",
-                aula=teacher.salon_asignado or "A-1",
-                defaults={
-                    "hora_inicio": "07:30",
-                    "hora_fin": "13:30",
-                    "observacion": "Registro demo generado automaticamente.",
-                    "estado": "cerrada",
-                },
-            )
+            base_days = 18 + (index % 5)
 
-            status = "Presente" if index % 5 else "Tardanza"
-            AsistenciaDetalle.objects.update_or_create(
-                fk_asistencia=attendance,
-                fk_alumno=student,
-                defaults={
-                    "porcentaje_similitud": 98.2 if status == "Presente" else 91.4,
-                    "hora_entrada": "07:32" if status == "Presente" else "07:48",
-                    "estado_asistencia": status,
-                    "imagen_capturada": f"/captures/demo/alumno-{student.pk_alumno}.jpg",
-                    "dispositivo": f"CAM-{((index - 1) % 4) + 1:02d}",
-                    "observacion": "Demo para seguimiento y reportes.",
-                },
-            )
+            for day_offset in range(base_days):
+                attendance_date = date.today() - timedelta(days=day_offset + (index % 3))
+                weekday = attendance_date.weekday()
+
+                # Omitimos fines de semana para que el historial se vea más real.
+                if weekday >= 5:
+                    continue
+
+                attendance, _ = Asistencia.objects.update_or_create(
+                    fk_personal=teacher,
+                    fecha=attendance_date,
+                    curso=teacher.especialidad or "Curso Demo",
+                    aula=teacher.salon_asignado or "A-1",
+                    defaults={
+                        "hora_inicio": "07:30",
+                        "hora_fin": "13:30",
+                        "observacion": "Registro demo generado automaticamente.",
+                        "estado": "cerrada",
+                    },
+                )
+
+                pattern = (index + day_offset) % 9
+                if pattern in {0, 5}:
+                    status = "Tardanza"
+                    similarity = 91.4
+                    check_in_time = "07:48"
+                    observation = "Ingreso con ligera demora."
+                elif pattern == 7:
+                    status = "Ausente"
+                    similarity = None
+                    check_in_time = None
+                    observation = "Inasistencia registrada para seguimiento."
+                else:
+                    status = "Presente"
+                    similarity = round(96.5 + ((index + day_offset) % 3), 1)
+                    check_in_time = "07:32"
+                    observation = "Demo para seguimiento y reportes."
+
+                AsistenciaDetalle.objects.update_or_create(
+                    fk_asistencia=attendance,
+                    fk_alumno=student,
+                    defaults={
+                        "porcentaje_similitud": similarity,
+                        "hora_entrada": check_in_time,
+                        "estado_asistencia": status,
+                        "imagen_capturada": (
+                            f"/captures/demo/alumno-{student.pk_alumno}.jpg"
+                            if status != "Ausente"
+                            else None
+                        ),
+                        "dispositivo": f"CAM-{((index + day_offset - 1) % 4) + 1:02d}",
+                        "observacion": observation,
+                    },
+                )
 
     def _ensure_student_metrics(self, students: list[Alumno]) -> dict[str, int]:
         summary = {"complete": 0, "incomplete": 0, "pending": 0}

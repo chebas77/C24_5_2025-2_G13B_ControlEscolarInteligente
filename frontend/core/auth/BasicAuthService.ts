@@ -51,7 +51,18 @@ export class BasicAuthService {
     });
 
     if (!response.ok) {
-      throw new Error("Credenciales incorrectas.");
+      let message = "Credenciales incorrectas.";
+
+      try {
+        const errorData = (await response.json()) as { error?: string };
+        if (errorData.error) {
+          message = errorData.error;
+        }
+      } catch {
+        // Si la respuesta no es JSON, mantenemos el mensaje por defecto.
+      }
+
+      throw new Error(message);
     }
 
     const data = await response.json();

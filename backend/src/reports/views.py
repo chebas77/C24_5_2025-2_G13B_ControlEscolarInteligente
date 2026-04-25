@@ -22,7 +22,7 @@ from django.conf import settings
 class PadreLoginView(APIView):
     def post(self, request):
         try:
-            email = request.data.get('email', '').strip()
+            email = request.data.get('email', '').strip().lower()
             dni_hijo = request.data.get('dni_hijo', '').strip()
             
             print(f"Login attempt - Email: {email}, DNI hijo: {dni_hijo}")
@@ -31,10 +31,20 @@ class PadreLoginView(APIView):
                 return Response({'error': 'Email y DNI del hijo son requeridos'}, status=400)
             
             # Verificar si el padre existe
-            padre = Padre.objects.filter(email=email).first()
+            padre = Padre.objects.filter(email__iexact=email).first()
             print(f"Padre encontrado: {padre}")
             
             if not padre:
+                if email.endswith('@demo.scei.pe') and not Padre.objects.exists():
+                    return Response(
+                        {
+                            'error': (
+                                'Padre no encontrado. No hay datos demo cargados en la base local; '
+                                'ejecuta `python manage.py seed_demo_users --count 20 --reset`.'
+                            )
+                        },
+                        status=404,
+                    )
                 return Response({'error': 'Padre no encontrado'}, status=404)
             
             # Verificar si el hijo existe y pertenece a la familia del padre
@@ -68,8 +78,9 @@ class PadreLoginView(APIView):
 class PadreAlumnosView(APIView):
     def get(self, request, email):
         try:
+            email = email.strip().lower()
             print(f"Buscando alumnos para padre: {email}")
-            padre = Padre.objects.filter(email=email).first()
+            padre = Padre.objects.filter(email__iexact=email).first()
             
             if not padre:
                 return Response({'error': 'Padre no encontrado'}, status=404)
@@ -158,6 +169,77 @@ class PadreAlumnosView(APIView):
             
         except Exception as e:
             print(f"ERROR en PadreAlumnosView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+
+class ProfesorPanelView(APIView):
+    def get(self, request, email):
+        try:
+            email = email.strip().lower()
+            profesor = PersonalEducativo.objects.filter(email__iexact=email).first()
+
+            if not profesor:
+                return Response({'error': 'Profesor no encontrado'}, status=404)
+
+            salon_asignado = (profesor.salon_asignado or '').strip()
+            grado = None
+            seccion = None
+            if '-' in salon_asignado:
+                grado, seccion = [part.strip() for part in salon_asignado.split('-', 1)]
+
+            alumnos = Alumno.objects.all().order_by('apellido_paterno', 'apellido_materno', 'nombre')
+            if grado:
+                alumnos = alumnos.filter(grado=grado)
+            if seccion:
+                alumnos = alumnos.filter(seccion=seccion)
+
+            today = datetime.now().date()
+            students_data = []
+
+            for alumno in alumnos:
+                detalle = AsistenciaDetalle.objects.filter(
+                    fk_alumno=alumno,
+                    fk_asistencia__fk_personal=profesor,
+                    fk_asistencia__fecha=today,
+                ).select_related('fk_asistencia').order_by('-hora_entrada', '-pk_asistencia_detalle').first()
+
+                status = 'pending'
+                time_value = None
+
+                if detalle and detalle.estado_asistencia:
+                    estado_lower = detalle.estado_asistencia.lower()
+                    if 'presente' in estado_lower or 'asistio' in estado_lower:
+                        status = 'present'
+                    elif 'tarde' in estado_lower or 'tardanza' in estado_lower:
+                        status = 'late'
+                    elif 'ausente' in estado_lower or 'falta' in estado_lower:
+                        status = 'absent'
+
+                    if detalle.hora_entrada:
+                        time_value = str(detalle.hora_entrada)[:5]
+
+                students_data.append({
+                    'id': str(alumno.pk_alumno),
+                    'name': f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}",
+                    'status': status,
+                    'time': time_value,
+                    'photo': '👨‍🎓' if int(alumno.pk_alumno) % 2 == 0 else '👩‍🎓',
+                })
+
+            return Response({
+                'teacher': {
+                    'email': profesor.email,
+                    'name': f"{profesor.nombre} {profesor.apellido_paterno}",
+                    'classroom': salon_asignado or 'Sin aula asignada',
+                    'course': profesor.especialidad or 'Curso demo',
+                },
+                'classes': [salon_asignado] if salon_asignado else [],
+                'students': students_data,
+            })
+        except Exception as e:
+            print(f"ERROR en ProfesorPanelView: {str(e)}")
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=500)
@@ -743,7 +825,8 @@ class PadrePreferenciasView(APIView):
     """
     def get(self, request, email):
         try:
-            padre = Padre.objects.filter(email=email).first()
+            email = email.strip().lower()
+            padre = Padre.objects.filter(email__iexact=email).first()
             if not padre:
                 return Response({'error': 'Padre no encontrado'}, status=404)
             
@@ -780,7 +863,8 @@ class PadrePreferenciasView(APIView):
     
     def put(self, request, email):
         try:
-            padre = Padre.objects.filter(email=email).first()
+            email = email.strip().lower()
+            padre = Padre.objects.filter(email__iexact=email).first()
             if not padre:
                 return Response({'error': 'Padre no encontrado'}, status=404)
             

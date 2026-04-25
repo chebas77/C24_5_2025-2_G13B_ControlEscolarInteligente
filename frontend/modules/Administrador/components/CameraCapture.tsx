@@ -1,17 +1,16 @@
 "use client";
-"use client";
 
 import * as faceapi from "face-api.js";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
-import { 
-  Camera, 
-  CameraOff,
-  CheckCircle2, 
-  XCircle,
+import {
   AlertCircle,
-  Eye
+  Camera,
+  CameraOff,
+  CheckCircle2,
+  Eye,
+  XCircle,
 } from "lucide-react";
 
 type CaptureState = "idle" | "waiting" | "analyzing" | "verified" | "rejected";
@@ -23,44 +22,73 @@ interface CameraCaptureProps {
   autoMode?: boolean;
 }
 
-export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: CameraCaptureProps) {
+interface GuideFrameMetrics {
+  faceInsideGuide: boolean;
+  overlapRatio: number;
+}
+
+export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
+  const processingRef = useRef(false);
+
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [captureState, setCaptureState] = useState<CaptureState>("idle");
   const [cameraActive, setCameraActive] = useState(false);
-  const [error, setError] = useState<string>("");
-  const [score, setScore] = useState<number>(0);
-  const [liveness, setLiveness] = useState<boolean>(false);
+  const [error, setError] = useState("");
+  const [score, setScore] = useState(0);
+  const [liveness, setLiveness] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [detectionHint, setDetectionHint] = useState("Esperando deteccion de rostro...");
+  const [faceInsideGuide, setFaceInsideGuide] = useState(false);
 
-  /** 🔹 Cargar modelos de face-api.js una vez */
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const MODEL_URL = "/models"; // carpeta /public/models/
         await Promise.all([
-  faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector"),
-  faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68"),
-  faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition")
-]);
-
-        console.log("✅ Modelos de face-api.js cargados");
+          faceapi.nets.tinyFaceDetector.loadFromUri("/models/tiny_face_detector"),
+          faceapi.nets.faceLandmark68Net.loadFromUri("/models/face_landmark_68"),
+          faceapi.nets.faceRecognitionNet.loadFromUri("/models/face_recognition"),
+        ]);
         setModelsLoaded(true);
       } catch (err) {
         console.error("Error al cargar modelos:", err);
-        setError("No se pudieron cargar los modelos de detección facial.");
+        setError("No se pudieron cargar los modelos de deteccion facial.");
       }
     };
-    loadModels();
+
+    void loadModels();
   }, []);
 
-  /** 🔹 Iniciar cámara */
+  const stopCamera = () => {
+    if (intervalId) {
+      clearInterval(intervalId);
+      setIntervalId(null);
+    }
+
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+    }
+
+    processingRef.current = false;
+    setStream(null);
+    setCameraActive(false);
+    setCaptureState("idle");
+    setFaceInsideGuide(false);
+    setDetectionHint("Esperando deteccion de rostro...");
+  };
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
   const startCamera = async () => {
     try {
       if (!modelsLoaded) {
-        setError("Espere a que se carguen los modelos...");
+        setError("Espere a que se carguen los modelos.");
         return;
       }
 
@@ -69,98 +97,212 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: C
           deviceId: deviceId ? { exact: deviceId } : undefined,
           width: { ideal: 800 },
           height: { ideal: 500 },
-          facingMode: "user"
+          facingMode: "user",
         },
-        audio: false
+        audio: false,
       });
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        setStream(mediaStream);
-        setCameraActive(true);
-        setCaptureState("waiting");
-
-        // Ejecutar captura cada 2.5 segundos
-        const id = setInterval(() => captureFrame(), 4500 );
-        setIntervalId(id);
+      if (!videoRef.current) {
+        return;
       }
+
+      videoRef.current.srcObject = mediaStream;
+      setStream(mediaStream);
+      setCameraActive(true);
+      setCaptureState("waiting");
+      setDetectionHint("Esperando deteccion de rostro...");
+
+      const id = setInterval(() => {
+        void captureFrame();
+      }, 900);
+      setIntervalId(id);
     } catch (err) {
-      console.error("Error al acceder a la cámara:", err);
-      setError("No se pudo acceder a la cámara. Verifique los permisos.");
+      console.error("Error al acceder a la camara:", err);
+      setError("No se pudo acceder a la camara. Verifique los permisos.");
     }
   };
 
-  /** 🔹 Detener cámara */
-  const stopCamera = () => {
-    if (intervalId) clearInterval(intervalId);
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    setStream(null);
-    setCameraActive(false);
-    setCaptureState("idle");
+  useEffect(() => {
+    if (modelsLoaded) {
+      void startCamera();
+    }
+  }, [modelsLoaded]);
+
+  const getGuideFrameMetrics = (
+    box: faceapi.Box,
+    displayWidth: number,
+    displayHeight: number,
+  ): GuideFrameMetrics => {
+    const previewEl = previewRef.current;
+    const guideEl = guideRef.current;
+
+    if (!previewEl || !guideEl || !displayWidth || !displayHeight) {
+      return { faceInsideGuide: false, overlapRatio: 0 };
+    }
+
+    const previewRect = previewEl.getBoundingClientRect();
+    const guideRect = guideEl.getBoundingClientRect();
+    if (!previewRect.width || !previewRect.height) {
+      return { faceInsideGuide: false, overlapRatio: 0 };
+    }
+
+    const scaleX = previewRect.width / displayWidth;
+    const scaleY = previewRect.height / displayHeight;
+
+    const faceLeft = box.x * scaleX;
+    const faceTop = box.y * scaleY;
+    const faceRight = faceLeft + box.width * scaleX;
+    const faceBottom = faceTop + box.height * scaleY;
+
+    const guideLeft = guideRect.left - previewRect.left;
+    const guideTop = guideRect.top - previewRect.top;
+    const guideRight = guideLeft + guideRect.width;
+    const guideBottom = guideTop + guideRect.height;
+
+    const overlapLeft = Math.max(faceLeft, guideLeft);
+    const overlapTop = Math.max(faceTop, guideTop);
+    const overlapRight = Math.min(faceRight, guideRight);
+    const overlapBottom = Math.min(faceBottom, guideBottom);
+    const overlapWidth = Math.max(0, overlapRight - overlapLeft);
+    const overlapHeight = Math.max(0, overlapBottom - overlapTop);
+    const overlapArea = overlapWidth * overlapHeight;
+    const faceArea = Math.max(1, (faceRight - faceLeft) * (faceBottom - faceTop));
+    const overlapRatio = overlapArea / faceArea;
+
+    const centerX = faceLeft + (faceRight - faceLeft) / 2;
+    const centerY = faceTop + (faceBottom - faceTop) / 2;
+    const faceInsideGuide =
+      centerX >= guideLeft &&
+      centerX <= guideRight &&
+      centerY >= guideTop &&
+      centerY <= guideBottom &&
+      overlapRatio >= 0.55;
+
+    return { faceInsideGuide, overlapRatio };
   };
 
-  /** 🔹 Capturar y analizar */
   const captureFrame = async () => {
-    if (!videoRef.current || !modelsLoaded) return;
+    if (!videoRef.current || !modelsLoaded || processingRef.current) {
+      return;
+    }
 
     try {
-      const detections = await faceapi.detectAllFaces(
+      processingRef.current = true;
+
+      const detection = await faceapi.detectSingleFace(
         videoRef.current,
-        new faceapi.TinyFaceDetectorOptions()
+        new faceapi.TinyFaceDetectorOptions({
+          inputSize: 320,
+          scoreThreshold: 0.25,
+        }),
       );
 
-      if (detections.length > 0) {
-        const confidence = detections[0].score * 100;
-        setCaptureState("analyzing");
+      if (!detection) {
+        setFaceInsideGuide(false);
+        setCaptureState("waiting");
+        setDetectionHint("Esperando deteccion de rostro...");
+        if (onAutoDetect) {
+          onAutoDetect(false, 0);
+        }
+        return;
+      }
 
-        if (onAutoDetect) onAutoDetect(true, confidence);
+      const confidence = detection.score * 100;
+      const metrics = getGuideFrameMetrics(
+        detection.box,
+        videoRef.current.videoWidth,
+        videoRef.current.videoHeight,
+      );
 
-        setTimeout(() => {
-          setScore(confidence);
-          setLiveness(confidence > 70);
-          if (confidence > 75) {
-            setCaptureState("verified");
-            if (onCapture) {
-              const canvas = canvasRef.current!;
-              const ctx = canvas.getContext("2d")!;
-              canvas.width = videoRef.current!.videoWidth;
-              canvas.height = videoRef.current!.videoHeight;
-              ctx.drawImage(videoRef.current!, 0, 0);
+      setScore(confidence);
+      setFaceInsideGuide(metrics.faceInsideGuide);
+
+      if (!metrics.faceInsideGuide) {
+        setCaptureState("waiting");
+        setDetectionHint("Rostro detectado. Ubique su cara dentro del marco.");
+        if (onAutoDetect) {
+          onAutoDetect(false, confidence);
+        }
+        return;
+      }
+
+      setCaptureState("analyzing");
+      setDetectionHint("Reconociendo rostro...");
+      if (onAutoDetect) {
+        onAutoDetect(true, confidence);
+      }
+
+      setTimeout(() => {
+        setLiveness(confidence > 65);
+
+        if (confidence > 55) {
+          setCaptureState("verified");
+          setDetectionHint("Rostro dentro del marco. Asistencia registrada.");
+
+          if (onCapture && videoRef.current && canvasRef.current) {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              canvas.width = videoRef.current.videoWidth;
+              canvas.height = videoRef.current.videoHeight;
+              ctx.drawImage(videoRef.current, 0, 0);
               onCapture(canvas.toDataURL("image/jpeg"));
             }
-          } else {
-            setCaptureState("rejected");
           }
-          setTimeout(() => setCaptureState("waiting"), 3500);
-        }, 3000);
-      }
+        } else {
+          setCaptureState("rejected");
+          setDetectionHint("Se detecto un rostro, pero la confianza fue baja.");
+        }
+
+        setTimeout(() => {
+          setCaptureState("waiting");
+          setDetectionHint("Esperando deteccion de rostro...");
+        }, 1800);
+      }, 600);
     } catch (err) {
-      console.error("Error en la detección:", err);
+      console.error("Error en la deteccion:", err);
+    } finally {
+      processingRef.current = false;
     }
   };
-
-  /** 🔹 Limpiar al desmontar */
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
-
-  /** 🔹 Auto iniciar */
-  useEffect(() => {
-    if (modelsLoaded) startCamera();
-  }, [modelsLoaded]);
 
   const getStateConfig = () => {
     switch (captureState) {
       case "idle":
-        return { color: "border-gray-400", icon: <Camera className="h-16 w-16 text-gray-400" />, text: "Cámara inactiva", bgColor: "from-gray-900" };
+        return {
+          color: "border-gray-400",
+          icon: <Camera className="h-16 w-16 text-gray-400" />,
+          text: "Camara inactiva",
+          bgColor: "from-gray-900",
+        };
       case "waiting":
-        return { color: "border-blue-400", icon: <Camera className="h-16 w-16 text-blue-400" />, text: "Esperando detección de rostro...", bgColor: "from-blue-900" };
+        return {
+          color: faceInsideGuide ? "border-cyan-400" : "border-blue-400",
+          icon: <Camera className={`h-16 w-16 ${faceInsideGuide ? "text-cyan-400" : "text-blue-400"}`} />,
+          text: detectionHint,
+          bgColor: faceInsideGuide ? "from-cyan-900" : "from-blue-900",
+        };
       case "analyzing":
-        return { color: "border-yellow-400 animate-pulse", icon: <Camera className="h-16 w-16 text-yellow-400 animate-spin" />, text: "Procesando rostro...", bgColor: "from-yellow-900" };
+        return {
+          color: "border-yellow-400 animate-pulse",
+          icon: <Camera className="h-16 w-16 animate-spin text-yellow-400" />,
+          text: detectionHint,
+          bgColor: "from-yellow-900",
+        };
       case "verified":
-        return { color: "border-green-400", icon: <CheckCircle2 className="h-16 w-16 text-green-400" />, text: "Asistencia registrada", bgColor: "from-green-900" };
+        return {
+          color: "border-green-400",
+          icon: <CheckCircle2 className="h-16 w-16 text-green-400" />,
+          text: detectionHint,
+          bgColor: "from-green-900",
+        };
       case "rejected":
-        return { color: "border-red-400", icon: <XCircle className="h-16 w-16 text-red-400" />, text: "No se detectó coincidencia", bgColor: "from-red-900" };
+        return {
+          color: "border-red-400",
+          icon: <XCircle className="h-16 w-16 text-red-400" />,
+          text: detectionHint,
+          bgColor: "from-red-900",
+        };
     }
   };
 
@@ -168,36 +310,37 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: C
 
   return (
     <div className="space-y-4">
-      {/* Estado cámara */}
       <div className="flex items-center justify-between">
         <Badge variant={cameraActive ? "default" : "secondary"} className="gap-2">
           {cameraActive ? (
             <>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div> Cámara activa
+              <div className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+              Camara activa
             </>
           ) : (
             <>
-              <CameraOff className="h-3 w-3" /> Cámara inactiva
+              <CameraOff className="h-3 w-3" />
+              Camara inactiva
             </>
           )}
         </Badge>
         <Badge variant="outline">Dispositivo: {deviceId}</Badge>
       </div>
 
-      {/* Video + overlay */}
-      <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
-        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+      <div ref={previewRef} className="relative aspect-video overflow-hidden rounded-lg bg-black">
+        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
         <canvas ref={canvasRef} className="hidden" />
 
         {cameraActive && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-96 h-[30rem]">
-              <div className={`absolute inset-0 border-4 rounded-lg transition-colors ${stateConfig.color}`}>
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white"></div>
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white"></div>
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white"></div>
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white"></div>
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div ref={guideRef} className="relative h-[30rem] w-96 max-h-[88%] max-w-[70%]">
+              <div className={`absolute inset-0 rounded-lg border-4 transition-colors ${stateConfig.color}`}>
+                <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white" />
+                <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-white" />
+                <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-white" />
+                <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-white" />
               </div>
+
               {captureState !== "waiting" && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   {stateConfig.icon}
@@ -214,24 +357,24 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: C
         </div>
 
         {(captureState === "verified" || captureState === "rejected") && (
-          <div className="absolute top-4 right-4 space-y-2">
+          <div className="absolute right-4 top-4 space-y-2">
             <Badge variant={score > 75 ? "default" : "secondary"} className={score > 75 ? "bg-green-600" : "bg-red-600"}>
               Score: {score.toFixed(1)}%
             </Badge>
             <Badge variant={liveness ? "default" : "secondary"} className={liveness ? "bg-green-600" : "bg-red-600"}>
-              <Eye className="h-3 w-3 mr-1" /> {liveness ? "Liveness OK" : "Liveness Fail"}
+              <Eye className="mr-1 h-3 w-3" />
+              {liveness ? "Liveness OK" : "Liveness Fail"}
             </Badge>
           </div>
         )}
       </div>
 
-      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3">
           <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+            <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
             <div>
-              <h4 className="text-red-900">Error de Cámara</h4>
+              <h4 className="text-red-900">Error de Camara</h4>
               <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
@@ -241,7 +384,8 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect, autoMode }: C
       {cameraActive && (
         <div className="flex justify-center">
           <Button variant="outline" onClick={stopCamera} className="w-1/3">
-            <CameraOff className="h-4 w-4 mr-2" /> Detener Cámara
+            <CameraOff className="mr-2 h-4 w-4" />
+            Detener Camara
           </Button>
         </div>
       )}
