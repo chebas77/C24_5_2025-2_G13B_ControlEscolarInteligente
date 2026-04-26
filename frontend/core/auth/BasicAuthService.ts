@@ -1,9 +1,7 @@
 import { AuthSession } from "./AuthSession";
-import type { ParentLoginPayload, UserRole } from "./types";
+import type { GoogleRegisterPayload, ParentLoginPayload, UserRole } from "./types";
 
 export class BasicAuthService {
-  private readonly allowedDomains = ["@gmail.com", "@feyalegria39.edu.pe", "@demo.scei.pe"];
-
   private readonly demoUsers: Record<string, UserRole> = {
     "admin001@demo.scei.pe": "admin",
     "admin002@demo.scei.pe": "admin",
@@ -25,7 +23,6 @@ export class BasicAuthService {
       throw new Error("Usuario demo no reconocido.");
     }
 
-    this.validateEmail(email);
     return new AuthSession({ email, role });
   }
 
@@ -70,10 +67,27 @@ export class BasicAuthService {
     });
   }
 
-  private validateEmail(email: string): void {
-    const isAllowed = this.allowedDomains.some((domain) => email.endsWith(domain));
-    if (!isAllowed) {
-      throw new Error("Solo se permiten cuentas autorizadas.");
+  public async registerWithGoogle(payload: GoogleRegisterPayload): Promise<AuthSession> {
+    const response = await fetch("http://localhost:8000/api/users/google/register/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        credential: payload.credential,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo registrar el usuario.");
     }
+
+    return new AuthSession({
+      email: data.email,
+      role: data.role,
+      accessToken: data.access,
+      name: data.name,
+      picture: data.picture,
+    });
   }
 }

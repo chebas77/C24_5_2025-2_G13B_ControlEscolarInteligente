@@ -33,6 +33,8 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
   const previewRef = useRef<HTMLDivElement>(null);
   const guideRef = useRef<HTMLDivElement>(null);
   const processingRef = useRef(false);
+  const streamRef = useRef<MediaStream | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [captureState, setCaptureState] = useState<CaptureState>("idle");
@@ -64,13 +66,19 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
   }, []);
 
   const stopCamera = () => {
-    if (intervalId) {
-      clearInterval(intervalId);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
       setIntervalId(null);
     }
 
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
 
     processingRef.current = false;
@@ -92,6 +100,8 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
         return;
       }
 
+      stopCamera();
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           deviceId: deviceId ? { exact: deviceId } : undefined,
@@ -103,10 +113,12 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       });
 
       if (!videoRef.current) {
+        mediaStream.getTracks().forEach((track) => track.stop());
         return;
       }
 
       videoRef.current.srcObject = mediaStream;
+      streamRef.current = mediaStream;
       setStream(mediaStream);
       setCameraActive(true);
       setCaptureState("waiting");
@@ -115,6 +127,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       const id = setInterval(() => {
         void captureFrame();
       }, 900);
+      intervalRef.current = id;
       setIntervalId(id);
     } catch (err) {
       console.error("Error al acceder a la camara:", err);
@@ -126,7 +139,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
     if (modelsLoaded) {
       void startCamera();
     }
-  }, [modelsLoaded]);
+  }, [modelsLoaded, deviceId]);
 
   const getGuideFrameMetrics = (
     box: faceapi.Box,

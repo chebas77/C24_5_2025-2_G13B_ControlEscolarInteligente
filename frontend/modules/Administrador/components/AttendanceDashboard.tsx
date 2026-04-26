@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
@@ -21,8 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/app/components/ui/table";
-import { 
-  Calendar,
+import {
   Users,
   Clock,
   XCircle,
@@ -31,7 +30,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Monitor,
-  Eye
+  Eye,
+  RefreshCw,
 } from "lucide-react";
 
 interface AttendanceEvent {
@@ -40,97 +40,126 @@ interface AttendanceEvent {
   student: string;
   code: string;
   device: string;
-  result: 'OK' | 'Observado';
+  result: "OK" | "Observado";
   score: number;
   liveness: boolean;
 }
 
-export function AttendanceDashboard() {
-  const [selectedDate] = useState('today');
-  const [selectedGrade] = useState('all');
-  const [selectedSection] = useState('all');
+interface DashboardStats {
+  attendanceToday: number;
+  lateArrivals: number;
+  absences: number;
+  totalEvents: number;
+  trend: {
+    attendance: number;
+    lateArrivals: number;
+    absences: number;
+  };
+}
 
-  const stats = {
-    attendanceToday: 132,
-    lateArrivals: 8,
-    absences: 5,
-    totalEvents: 145,
-    trend: {
-      attendance: +3,
-      lateArrivals: -2,
-      absences: -1
-    },
-    byPavilion: [
-      { name: 'Pabellón A', present: 45, total: 50 },
-      { name: 'Pabellón B', present: 42, total: 48 },
-      { name: 'Pabellón C', present: 45, total: 47 }
-    ]
+interface AttendanceDashboardResponse {
+  stats?: DashboardStats;
+  recentEvents?: AttendanceEvent[];
+  filters?: {
+    grades?: string[];
+    sections?: string[];
+    devices?: string[];
+  };
+  error?: string;
+}
+
+const API_BASE_URL = "http://localhost:8000/api/reports";
+
+const emptyStats: DashboardStats = {
+  attendanceToday: 0,
+  lateArrivals: 0,
+  absences: 0,
+  totalEvents: 0,
+  trend: {
+    attendance: 0,
+    lateArrivals: 0,
+    absences: 0,
+  },
+};
+
+export function AttendanceDashboard() {
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedGrade, setSelectedGrade] = useState("all");
+  const [selectedSection, setSelectedSection] = useState("all");
+  const [selectedDevice, setSelectedDevice] = useState("all");
+  const [stats, setStats] = useState<DashboardStats>(emptyStats);
+  const [recentEvents, setRecentEvents] = useState<AttendanceEvent[]>([]);
+  const [filterOptions, setFilterOptions] = useState({
+    grades: [] as string[],
+    sections: [] as string[],
+    devices: [] as string[],
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadDashboard = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const params = new URLSearchParams({
+        date: selectedDate,
+        grade: selectedGrade,
+        section: selectedSection,
+        device: selectedDevice,
+      });
+      const response = await fetch(`${API_BASE_URL}/admin/attendance/dashboard/?${params.toString()}`);
+      const data: AttendanceDashboardResponse = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo cargar el dashboard.");
+      }
+
+      setStats(data.stats || emptyStats);
+      setRecentEvents(data.recentEvents || []);
+      setFilterOptions({
+        grades: data.filters?.grades || [],
+        sections: data.filters?.sections || [],
+        devices: data.filters?.devices || [],
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado al cargar asistencia.");
+      setStats(emptyStats);
+      setRecentEvents([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const recentEvents: AttendanceEvent[] = [
-    {
-      id: '1',
-      time: '07:35:12',
-      student: 'García Pérez, Juan Carlos',
-      code: 'EST-2024-001',
-      device: 'KSK-001',
-      result: 'OK',
-      score: 94.5,
-      liveness: true
-    },
-    {
-      id: '2',
-      time: '07:35:45',
-      student: 'Rodríguez Silva, Miguel Ángel',
-      code: 'EST-2024-002',
-      device: 'KSK-001',
-      result: 'OK',
-      score: 89.2,
-      liveness: true
-    },
-    {
-      id: '3',
-      time: '07:36:20',
-      student: 'López Martínez, Carlos Eduardo',
-      code: 'EST-2024-003',
-      device: 'KSK-002',
-      result: 'Observado',
-      score: 72.1,
-      liveness: false
-    },
-    {
-      id: '4',
-      time: '07:37:05',
-      student: 'Fernández Vega, José Luis',
-      code: 'EST-2024-004',
-      device: 'KSK-001',
-      result: 'OK',
-      score: 91.8,
-      liveness: true
-    },
-    {
-      id: '5',
-      time: '07:38:15',
-      student: 'Sánchez Torres, Roberto Carlos',
-      code: 'EST-2024-005',
-      device: 'KSK-002',
-      result: 'OK',
-      score: 88.5,
-      liveness: true
-    }
-  ];
+  useEffect(() => {
+    void loadDashboard();
+  }, [selectedDate, selectedGrade, selectedSection, selectedDevice]);
+
+  const trendClass = (value: number, lowerIsBetter = false) => {
+    const good = lowerIsBetter ? value <= 0 : value >= 0;
+    return good ? "text-green-600" : "text-red-600";
+  };
+
+  const trendLabel = (value: number) => `${value > 0 ? "+" : ""}${value}%`;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl text-gray-900">Dashboard de Asistencia</h2>
-        <p className="text-gray-600">
-          Monitoreo en tiempo real • Género: Varones
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl text-gray-900">Dashboard de Asistencia</h2>
+          <p className="text-gray-600">Monitoreo en tiempo real - Genero: Varones</p>
+        </div>
+        <Button variant="outline" onClick={loadDashboard} disabled={isLoading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          Actualizar
+        </Button>
       </div>
 
-      {/* KPIs */}
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -141,7 +170,7 @@ export function AttendanceDashboard() {
             <div className="text-2xl text-green-600">{stats.attendanceToday}</div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <TrendingUp className="h-3 w-3 text-green-600" />
-              <span className="text-green-600">+{stats.trend.attendance}%</span>
+              <span className={trendClass(stats.trend.attendance)}>{trendLabel(stats.trend.attendance)}</span>
               <span>vs ayer</span>
             </div>
           </CardContent>
@@ -156,7 +185,9 @@ export function AttendanceDashboard() {
             <div className="text-2xl text-yellow-600">{stats.lateArrivals}</div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <TrendingDown className="h-3 w-3 text-green-600" />
-              <span className="text-green-600">{stats.trend.lateArrivals}%</span>
+              <span className={trendClass(stats.trend.lateArrivals, true)}>
+                {trendLabel(stats.trend.lateArrivals)}
+              </span>
               <span>vs ayer</span>
             </div>
           </CardContent>
@@ -171,7 +202,7 @@ export function AttendanceDashboard() {
             <div className="text-2xl text-red-600">{stats.absences}</div>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <TrendingDown className="h-3 w-3 text-green-600" />
-              <span className="text-green-600">{stats.trend.absences}%</span>
+              <span className={trendClass(stats.trend.absences, true)}>{trendLabel(stats.trend.absences)}</span>
               <span>vs ayer</span>
             </div>
           </CardContent>
@@ -184,94 +215,68 @@ export function AttendanceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl text-blue-600">{stats.totalEvents}</div>
-            <p className="text-xs text-muted-foreground">
-              registros procesados
-            </p>
+            <p className="text-xs text-muted-foreground">registros procesados</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle>Filtros y Búsqueda</CardTitle>
-          <CardDescription>
-            Filtre los datos por diferentes criterios
-          </CardDescription>
+          <CardTitle>Filtros y Busqueda</CardTitle>
+          <CardDescription>Filtre los datos por diferentes criterios</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Fecha</Label>
-              <Select value={selectedDate}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Hoy</SelectItem>
-                  <SelectItem value="yesterday">Ayer</SelectItem>
-                  <SelectItem value="week">Esta semana</SelectItem>
-                  <SelectItem value="month">Este mes</SelectItem>
-                  <SelectItem value="custom">Rango personalizado</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
               <Label>Grado</Label>
-              <Select value={selectedGrade}>
+              <Select value={selectedGrade} onValueChange={setSelectedGrade}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los grados</SelectItem>
-                  <SelectItem value="1">1er Grado</SelectItem>
-                  <SelectItem value="2">2do Grado</SelectItem>
-                  <SelectItem value="3">3er Grado</SelectItem>
-                  <SelectItem value="4">4to Grado</SelectItem>
-                  <SelectItem value="5">5to Grado</SelectItem>
+                  {filterOptions.grades.map((grade) => (
+                    <SelectItem key={grade} value={grade}>{grade}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Sección</Label>
-              <Select value={selectedSection}>
+              <Label>Seccion</Label>
+              <Select value={selectedSection} onValueChange={setSelectedSection}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas las secciones</SelectItem>
-                  <SelectItem value="A">Sección A</SelectItem>
-                  <SelectItem value="B">Sección B</SelectItem>
-                  <SelectItem value="C">Sección C</SelectItem>
+                  {filterOptions.sections.map((section) => (
+                    <SelectItem key={section} value={section}>{section}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label>Género</Label>
-              <Select value="varones" disabled>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="varones">Varones</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Pabellón/Dispositivo</Label>
-              <Select>
+              <Label>Dispositivo</Label>
+              <Select value={selectedDevice} onValueChange={setSelectedDevice}>
                 <SelectTrigger>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="ksk-001">KSK-001 (Pabellón A)</SelectItem>
-                  <SelectItem value="ksk-002">KSK-002 (Pabellón B)</SelectItem>
-                  <SelectItem value="ksk-003">KSK-003 (Pabellón C)</SelectItem>
+                  {filterOptions.devices.map((device) => (
+                    <SelectItem key={device} value={device}>{device}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -279,38 +284,10 @@ export function AttendanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Estado por Pabellón */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {stats.byPavilion.map((pavilion, index) => (
-          <Card key={index}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{pavilion.name}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-2xl">{pavilion.present}/{pavilion.total}</span>
-                <span className="text-sm text-muted-foreground">
-                  {((pavilion.present / pavilion.total) * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-600 h-2 rounded-full transition-all"
-                  style={{ width: `${(pavilion.present / pavilion.total) * 100}%` }}
-                ></div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Eventos Recientes */}
       <Card>
         <CardHeader>
           <CardTitle>Eventos Recientes</CardTitle>
-          <CardDescription>
-            Últimos registros de asistencia procesados
-          </CardDescription>
+          <CardDescription>Ultimos registros de asistencia procesados</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -318,7 +295,7 @@ export function AttendanceDashboard() {
               <TableRow>
                 <TableHead>Hora</TableHead>
                 <TableHead>Estudiante</TableHead>
-                <TableHead>Código</TableHead>
+                <TableHead>Codigo</TableHead>
                 <TableHead>Dispositivo</TableHead>
                 <TableHead>Resultado</TableHead>
                 <TableHead>Score</TableHead>
@@ -326,7 +303,23 @@ export function AttendanceDashboard() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentEvents.map((event) => (
+              {isLoading && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                    Cargando datos desde la base de datos...
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!isLoading && recentEvents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                    No hay eventos registrados para la fecha seleccionada.
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {!isLoading && recentEvents.map((event) => (
                 <TableRow key={event.id}>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -344,10 +337,10 @@ export function AttendanceDashboard() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={event.result === 'OK' ? 'default' : 'secondary'}
-                      className={event.result === 'OK' ? 'bg-green-600' : 'bg-yellow-600'}
+                      variant={event.result === "OK" ? "default" : "secondary"}
+                      className={event.result === "OK" ? "bg-green-600" : "bg-yellow-600"}
                     >
-                      {event.result === 'OK' ? (
+                      {event.result === "OK" ? (
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                       ) : (
                         <AlertCircle className="h-3 w-3 mr-1" />
@@ -356,19 +349,19 @@ export function AttendanceDashboard() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <span className={`${
-                      event.score >= 85 ? 'text-green-600' :
-                      event.score >= 75 ? 'text-yellow-600' :
-                      'text-red-600'
-                    }`}>
+                    <span className={
+                      event.score >= 85 ? "text-green-600" :
+                      event.score >= 75 ? "text-yellow-600" :
+                      "text-red-600"
+                    }>
                       {event.score.toFixed(1)}%
                     </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <Eye className={`h-3 w-3 ${event.liveness ? 'text-green-600' : 'text-gray-400'}`} />
-                      <span className={event.liveness ? 'text-green-600' : 'text-gray-400'}>
-                        {event.liveness ? 'Detectado' : 'No detectado'}
+                      <Eye className={`h-3 w-3 ${event.liveness ? "text-green-600" : "text-gray-400"}`} />
+                      <span className={event.liveness ? "text-green-600" : "text-gray-400"}>
+                        {event.liveness ? "Detectado" : "No detectado"}
                       </span>
                     </div>
                   </TableCell>
@@ -376,12 +369,12 @@ export function AttendanceDashboard() {
               ))}
             </TableBody>
           </Table>
-          
+
           <div className="mt-4 flex items-center justify-between">
             <p className="text-sm text-gray-600">
-              Mostrando 5 de {stats.totalEvents} eventos
+              Mostrando {recentEvents.length} de {stats.totalEvents} eventos
             </p>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={loadDashboard}>
               Ver todos
             </Button>
           </div>

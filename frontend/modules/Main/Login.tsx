@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, BadgeCheck, BookOpen, GraduationCap, Landmark, Mail, MapPin, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
@@ -17,6 +17,32 @@ interface QuickAccessUser {
   dniHijo?: string;
 }
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          renderButton: (
+            element: HTMLElement,
+            options: {
+              theme: string;
+              size: string;
+              type: string;
+              shape: string;
+              text: string;
+              width: number;
+            },
+          ) => void;
+        };
+      };
+    };
+  }
+}
+
 export function LoginModule() {
   const router = useRouter();
   const authStorage = useMemo(() => new AuthStorageService(), []);
@@ -28,6 +54,8 @@ export function LoginModule() {
   const [dniHijo, setDniHijo] = useState("");
   const [parentLoading, setParentLoading] = useState(false);
   const [selectedSection, setSelectedSection] = useState("Administracion");
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
   useEffect(() => {
     const session = authStorage.load();
@@ -35,6 +63,65 @@ export function LoginModule() {
       router.replace(routeResolver.resolveHomeByRole(session.role));
     }
   }, [authStorage, routeResolver, router]);
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) {
+      return;
+    }
+
+    const initializeGoogle = () => {
+      if (!window.google || !googleButtonRef.current) {
+        return;
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response) => {
+          if (!response.credential) {
+            setError("Google no devolvio credenciales.");
+            return;
+          }
+
+          setError("");
+          setLoadingEmail("google");
+
+          try {
+            const session = await authService.registerWithGoogle({
+              credential: response.credential,
+            });
+            authStorage.save(session);
+            router.push(routeResolver.resolveHomeByRole(session.role));
+          } catch (currentError) {
+            setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion con Google.");
+          } finally {
+            setLoadingEmail(null);
+          }
+        },
+      });
+
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        type: "standard",
+        shape: "rectangular",
+        text: "continue_with",
+        width: 360,
+      });
+    };
+
+    if (window.google) {
+      initializeGoogle();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = initializeGoogle;
+    document.head.appendChild(script);
+  }, [authService, authStorage, googleClientId, routeResolver, router]);
 
   const demoSections: Array<{ title: string; users: QuickAccessUser[] }> = [
     {
@@ -122,21 +209,6 @@ export function LoginModule() {
     }
 
     await navigateWithSession(user.email);
-  };
-
-  const loginWithRandomGoogle = async () => {
-    setError("");
-    setLoadingEmail("google");
-
-    try {
-      const session = await authService.loginWithRandomDemoUser();
-      authStorage.save(session);
-      router.push(routeResolver.resolveHomeByRole(session.role));
-    } catch (currentError) {
-      setError(currentError instanceof Error ? currentError.message : "No se pudo iniciar sesion.");
-    } finally {
-      setLoadingEmail(null);
-    }
   };
 
   const handleParentSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -247,13 +319,23 @@ export function LoginModule() {
                 </div>
               </div>
 
-              <Button
-                onClick={loginWithRandomGoogle}
-                disabled={loadingEmail === "google"}
-                className="h-12 w-full rounded-xl bg-slate-950 text-white shadow-lg shadow-slate-300 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:shadow-black/20 dark:hover:bg-white"
-              >
-                {loadingEmail === "google" ? "Conectando..." : "Continuar con Google"}
-              </Button>
+              <div className="space-y-3">
+                <div className="flex min-h-12 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-900/85">
+                  {googleClientId ? (
+                    <div ref={googleButtonRef} />
+                  ) : (
+                    <p className="text-sm text-red-600">
+                      Configura NEXT_PUBLIC_GOOGLE_CLIENT_ID para habilitar Google OAuth.
+                    </p>
+                  )}
+                </div>
+                {loadingEmail === "google" && (
+                  <p className="text-center text-sm text-slate-500">Validando credenciales de Google...</p>
+                )}
+                <p className="text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
+                  El acceso con Google usa el correo institucional del alumno y abre directamente el portal de padres.
+                </p>
+              </div>
             </CardHeader>
 
             <CardContent className="space-y-6 pt-6">
@@ -315,7 +397,7 @@ export function LoginModule() {
                   <div>
                     <h3 className="text-base font-semibold text-slate-950 dark:text-white">Acceso para padres y madres</h3>
                     <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                      Este ingreso valida el correo del apoderado junto con el DNI del estudiante para mantener una consulta segura.
+                      Puedes validar el acceso manualmente con el correo del apoderado y el DNI del estudiante. Si usas Google, el sistema toma el correo institucional del alumno y entra al mismo portal.
                     </p>
                   </div>
                   <div className="rounded-2xl bg-white p-2.5 text-red-600 shadow-sm dark:bg-slate-900/90 dark:text-red-300">

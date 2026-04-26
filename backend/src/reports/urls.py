@@ -1,5 +1,10 @@
 from django.urls import path
 from .views import (
+    AdminEnrollmentStudentsView,
+    AdminEnrollmentTemplateView,
+    AdminFaceMatchView,
+    AdminAttendanceDashboardView,
+    AdminTodayCaptureRecordsView,
     PadreLoginView, 
     PadreAlumnosView,
     ProfesorPanelView,
@@ -12,6 +17,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path('admin/enrollment/students/', AdminEnrollmentStudentsView.as_view(), name='admin-enrollment-students'),
+    path('admin/enrollment/students/<int:alumno_id>/template/', AdminEnrollmentTemplateView.as_view(), name='admin-enrollment-template'),
+    path('admin/attendance/dashboard/', AdminAttendanceDashboardView.as_view(), name='admin-attendance-dashboard'),
+    path('admin/capture/match/', AdminFaceMatchView.as_view(), name='admin-capture-match'),
+    path('admin/capture/today/', AdminTodayCaptureRecordsView.as_view(), name='admin-capture-today'),
     path('padres/login/', PadreLoginView.as_view(), name='padre-login'),
     path('padres/<str:email>/alumnos/', PadreAlumnosView.as_view(), name='padre-alumnos'),
     path('padres/<str:email>/preferencias/', PadrePreferenciasView.as_view(), name='padre-preferencias'),

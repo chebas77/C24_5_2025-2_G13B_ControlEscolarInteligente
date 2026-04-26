@@ -19,16 +19,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # del terminal/IDE para evitar desajustes de conexión.
 load_dotenv(BASE_DIR / '.env', override=True)
 
+
+def env_bool(name, default=False):
+    return os.getenv(name, str(default)).lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name, default=''):
+    raw_value = os.getenv(name, default)
+    return [item.strip() for item in raw_value.split(',') if item.strip()]
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9_--!ysio(aiofs7mbq=-j92+9wf-eu$p4z@@qq^09sl78lxrx'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-9_--!ysio(aiofs7mbq=-j92+9wf-eu$p4z@@qq^09sl78lxrx')
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 
 # Application definition
@@ -105,24 +115,76 @@ CHANNEL_LAYERS = {
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-USE_SQLITE = os.getenv('USE_SQLITE', 'False').lower() in {'1', 'true', 'yes', 'on'}
+USE_SQLITE = env_bool('USE_SQLITE', False)
+DB_ENGINE = os.getenv('DB_ENGINE', 'sqlite' if USE_SQLITE else 'postgresql').lower()
+DB_CONN_MAX_AGE = int(os.getenv('DB_CONN_MAX_AGE', '60'))
 
-if USE_SQLITE:
+if USE_SQLITE or DB_ENGINE == 'sqlite':
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+elif DB_ENGINE in {'mysql', 'mariadb'}:
+    import pymysql
+
+    pymysql.install_as_MySQLdb()
+
+    mysql_options = {
+        'charset': os.getenv('DB_CHARSET', 'utf8mb4'),
+        'init_command': f"SET sql_mode='{os.getenv('DB_SQL_MODE', 'STRICT_TRANS_TABLES')}'",
+        'connect_timeout': int(os.getenv('DB_CONNECT_TIMEOUT', '10')),
+    }
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': os.getenv('DB_NAME', 'control_escolar'),
+            'USER': os.getenv('DB_USER', 'root'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', '127.0.0.1'),
+            'PORT': os.getenv('DB_PORT', '3306'),
+            'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+            'OPTIONS': mysql_options,
+        }
+    }
+elif DB_ENGINE in {'mssql', 'sqlserver', 'sql_server'}:
+    mssql_options = {
+        'driver': os.getenv('DB_DRIVER', 'ODBC Driver 18 for SQL Server'),
+        'extra_params': os.getenv(
+            'DB_EXTRA_PARAMS',
+            'Encrypt=yes;TrustServerCertificate=yes',
+        ),
+        'connection_timeout': int(os.getenv('DB_CONNECT_TIMEOUT', '10')),
+        'connection_retries': int(os.getenv('DB_CONNECTION_RETRIES', '3')),
+        'connection_retry_backoff_time': int(os.getenv('DB_CONNECTION_RETRY_BACKOFF', '5')),
+        'query_timeout': int(os.getenv('DB_QUERY_TIMEOUT', '0')),
+    }
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'mssql',
+            'NAME': os.getenv('DB_NAME', 'control_escolar'),
+            'USER': os.getenv('DB_USER', 'sa'),
+            'PASSWORD': os.getenv('DB_PASSWORD', ''),
+            'HOST': os.getenv('DB_HOST', r'localhost\SQLEXPRESS'),
+            'PORT': os.getenv('DB_PORT', ''),
+            'Trusted_Connection': os.getenv('DB_TRUSTED_CONNECTION', 'no'),
+            'CONN_MAX_AGE': DB_CONN_MAX_AGE,
+            'OPTIONS': mssql_options,
+        }
+    }
 else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('PGDATABASE'),
-            'USER': os.getenv('PGUSER'),
-            'PASSWORD': os.getenv('PGPASSWORD'),
-            'HOST': os.getenv('PGHOST'),
-            'PORT': os.getenv('PGPORT', '5432'),
+            'NAME': os.getenv('DB_NAME', os.getenv('PGDATABASE')),
+            'USER': os.getenv('DB_USER', os.getenv('PGUSER')),
+            'PASSWORD': os.getenv('DB_PASSWORD', os.getenv('PGPASSWORD')),
+            'HOST': os.getenv('DB_HOST', os.getenv('PGHOST')),
+            'PORT': os.getenv('DB_PORT', os.getenv('PGPORT', '5432')),
+            'CONN_MAX_AGE': DB_CONN_MAX_AGE,
             'OPTIONS': {
                 'sslmode': os.getenv('DB_SSLMODE', 'require'),
                 'connect_timeout': 10,
@@ -155,7 +217,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Lima'
 
 USE_I18N = True
 

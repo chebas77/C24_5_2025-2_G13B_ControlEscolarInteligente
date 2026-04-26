@@ -1,8 +1,6 @@
 "use client";
 
-"use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
@@ -24,14 +22,24 @@ interface DevicesListProps {
 export function DevicesList({ onOpenCapture }: DevicesListProps) {
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const permissionStreamRef = useRef<MediaStream | null>(null);
   const router = useRouter();
 
   // Detectar cámaras disponibles
   useEffect(() => {
+    const stopPermissionStream = () => {
+      if (permissionStreamRef.current) {
+        permissionStreamRef.current.getTracks().forEach((track) => track.stop());
+        permissionStreamRef.current = null;
+      }
+    };
+
     const getCameras = async () => {
       try {
+        stopPermissionStream();
         // Pedimos permiso para listar nombres de cámaras
-        await navigator.mediaDevices.getUserMedia({ video: true });
+        const permissionStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        permissionStreamRef.current = permissionStream;
         setPermissionGranted(true);
 
         const devices = await navigator.mediaDevices.enumerateDevices();
@@ -40,6 +48,8 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
       } catch (error) {
         console.error("Error accediendo a cámaras:", error);
         setPermissionGranted(false);
+      } finally {
+        stopPermissionStream();
       }
     };
 
@@ -47,7 +57,10 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
 
     // Listener para cambios dinámicos (por ejemplo, conectar nueva cámara)
     navigator.mediaDevices.addEventListener("devicechange", getCameras);
-    return () => navigator.mediaDevices.removeEventListener("devicechange", getCameras);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", getCameras);
+      stopPermissionStream();
+    };
   }, []);
 
   const handleOpenCapture = (deviceId: string) => {

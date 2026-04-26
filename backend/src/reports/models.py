@@ -50,6 +50,8 @@ class Alumno(models.Model):
     apellido_paterno = models.CharField(max_length=50)
     apellido_materno = models.CharField(max_length=50)
     dni = models.CharField(max_length=12)
+    email = models.EmailField(max_length=100, unique=True, null=True, blank=True)
+    foto_perfil = models.CharField(max_length=500, null=True, blank=True)
     grado = models.CharField(max_length=10, null=True, blank=True)
     seccion = models.CharField(max_length=5, null=True, blank=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)

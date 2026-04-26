@@ -124,15 +124,17 @@ export function AdminDashboard({ userEmail, onLogout }: DashboardProps) {
 
           {/* Vista de Captura */}
           <TabsContent value="capture">
-            <CaptureStation 
-              deviceId={selectedDevice} 
-              onBack={handleBackToDevices}
-            />
+            {activeView === 'capture' && (
+              <CaptureStation 
+                deviceId={selectedDevice} 
+                onBack={handleBackToDevices}
+              />
+            )}
           </TabsContent>
 
           {/* Enrolamiento */}
           <TabsContent value="enrollment">
-            <EnrollmentManagement />
+            <EnrollmentManagement userEmail={userEmail} />
           </TabsContent>
 
           {/* Políticas y Umbrales */}

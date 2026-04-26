@@ -562,7 +562,15 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
         <Card className="mb-8">
           <CardHeader>
             <div className="flex flex-col sm:flex-row items-center sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
-              <div className="text-4xl sm:text-5xl">{student.photo}</div>
+              {student.photo && (student.photo.startsWith("http://") || student.photo.startsWith("https://")) ? (
+                <img
+                  src={student.photo}
+                  alt={student.name}
+                  className="h-16 w-16 rounded-full object-cover sm:h-20 sm:w-20"
+                />
+              ) : (
+                <div className="text-4xl sm:text-5xl">{student.photo}</div>
+              )}
               <div className="text-center sm:text-left">
                 <CardTitle className="text-xl sm:text-2xl">{student.name}</CardTitle>
                 <CardDescription className="text-sm sm:text-lg">{student.grade} • ID: {student.id}</CardDescription>

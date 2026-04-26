@@ -1,7 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import Padre, Alumno, AsistenciaDetalle, Asistencia, NotificacionPadre, PersonalEducativo, Comunicado, PreferenciasPadre, Marcacion
+from .models import Padre, Alumno, AlumnoMetrics, AsistenciaDetalle, Asistencia, NotificacionPadre, PersonalEducativo, Comunicado, PreferenciasPadre, Marcacion
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -19,6 +20,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.conf import settings
+import cv2
+import numpy as np
 
 class PadreLoginView(APIView):
     def post(self, request):
@@ -77,18 +80,22 @@ class PadreLoginView(APIView):
             return Response({'error': f'Error interno del servidor: {str(e)}'}, status=500)
 
 class PadreAlumnosView(APIView):
+    tardiness_limit = time(7, 45)
+
     def get(self, request, email):
         try:
             email = email.strip().lower()
             print(f"Buscando alumnos para padre: {email}")
             padre = Padre.objects.filter(email__iexact=email).first()
-            
-            if not padre:
-                return Response({'error': 'Padre no encontrado'}, status=404)
-            
-            print(f"Padre encontrado: {padre.nombre} {padre.apellido_paterno}, Familia: {padre.fk_codigo_familia}")
-            
-            alumnos = Alumno.objects.filter(fk_codigo_familia=padre.fk_codigo_familia)
+
+            if padre:
+                print(f"Padre encontrado: {padre.nombre} {padre.apellido_paterno}, Familia: {padre.fk_codigo_familia}")
+                alumnos = Alumno.objects.filter(fk_codigo_familia=padre.fk_codigo_familia)
+            else:
+                alumno_por_email = Alumno.objects.filter(email__iexact=email).first()
+                if not alumno_por_email:
+                    return Response({'error': 'Padre o alumno no encontrado'}, status=404)
+                alumnos = Alumno.objects.filter(pk_alumno=alumno_por_email.pk_alumno)
             print(f"Número de alumnos encontrados: {alumnos.count()}")
             
             alumnos_data = []
@@ -103,65 +110,68 @@ class PadreAlumnosView(APIView):
                     'fk_asistencia', 
                     'fk_asistencia__fk_personal'
                 ).order_by('-fk_asistencia__fecha')
+
+                marcaciones_qs = Marcacion.objects.filter(
+                    dni=alumno.dni,
+                    tipo_marcacion__startswith='facial:'
+                ).order_by('-hora_marcacion')
                 
                 print(f"Registros de asistencia encontrados: {asistencia_qs.count()}")
                 
-                attendance = []
+                attendance_by_date = {}
                 
                 for detalle in asistencia_qs:
-                    teacher_name = 'Sin asignar'
-                    curso = 'Sin curso'
-                    
-                    if detalle.fk_asistencia:
-                        if detalle.fk_asistencia.fk_personal:
-                            personal = detalle.fk_asistencia.fk_personal
-                            teacher_name = f"{personal.nombre} {personal.apellido_paterno}"
-                        
-                        if detalle.fk_asistencia.curso:
-                            curso = detalle.fk_asistencia.curso
-                    
-                    # Determinar el estado de asistencia
-                    status = 'absent'  # Por defecto
-                    if detalle.estado_asistencia:
-                        estado_lower = detalle.estado_asistencia.lower()
-                        if 'presente' in estado_lower or 'asistio' in estado_lower:
-                            status = 'present'
-                        elif 'tarde' in estado_lower or 'tardanza' in estado_lower:
-                            status = 'late'
-                        elif 'ausente' in estado_lower or 'falta' in estado_lower:
-                            status = 'absent'
-                    
-                    fecha_str = None
-                    if detalle.fk_asistencia and detalle.fk_asistencia.fecha:
-                        fecha_str = str(detalle.fk_asistencia.fecha)
-                    
-                    time_entrada = None
-                    if detalle.hora_entrada:
-                        time_entrada = str(detalle.hora_entrada)
-                    
-                    time_salida = None
-                    if detalle.fk_asistencia and detalle.fk_asistencia.hora_fin:
-                        time_salida = str(detalle.fk_asistencia.hora_fin)
-                    
-                    record = {
-                        'date': fecha_str,
-                        'status': status,
-                        'time': time_entrada,
-                        'time_entrada': time_entrada,
-                        'time_salida': time_salida,
-                        'teacher': teacher_name,
-                        'course': curso,
-                        'observations': detalle.observacion or ''
-                    }
-                    
-                    print(f"  Registro asistencia: fecha={fecha_str}, estado={detalle.estado_asistencia}, status={status}, entrada={time_entrada}, salida={time_salida}")
-                    attendance.append(record)
+                    record = self._build_attendance_from_detail(detalle)
+                    if record['date']:
+                        attendance_by_date[record['date']] = record
+                        print(
+                            f"  Registro asistencia: fecha={record['date']}, "
+                            f"estado={detalle.estado_asistencia}, status={record['status']}, "
+                            f"entrada={record['time_entrada']}, salida={record['time_salida']}"
+                        )
+
+                marcaciones_por_fecha = {}
+                for marcacion in marcaciones_qs:
+                    marcacion_date = timezone.localtime(marcacion.hora_marcacion).date().isoformat()
+                    current_mark = marcaciones_por_fecha.get(marcacion_date)
+                    if not current_mark or marcacion.hora_marcacion < current_mark.hora_marcacion:
+                        marcaciones_por_fecha[marcacion_date] = marcacion
+
+                for fecha_str, marcacion in marcaciones_por_fecha.items():
+                    facial_record = self._build_attendance_from_marcacion(marcacion)
+                    existing = attendance_by_date.get(fecha_str)
+
+                    if not existing:
+                        attendance_by_date[fecha_str] = facial_record
+                        continue
+
+                    if existing['status'] == 'absent' or not existing.get('time_entrada'):
+                        merged_observations = existing.get('observations') or ''
+                        if facial_record.get('observations'):
+                            merged_observations = (
+                                f"{merged_observations} | {facial_record['observations']}"
+                                if merged_observations else facial_record['observations']
+                            )
+                        existing.update({
+                            'status': facial_record['status'],
+                            'time': facial_record['time'],
+                            'time_entrada': facial_record['time_entrada'],
+                            'teacher': existing.get('teacher') or facial_record['teacher'],
+                            'course': existing.get('course') or facial_record['course'],
+                            'observations': merged_observations,
+                        })
+
+                attendance = sorted(
+                    attendance_by_date.values(),
+                    key=lambda record: record.get('date') or '',
+                    reverse=True,
+                )
                 
                 alumnos_data.append({
                     'id': str(alumno.pk_alumno),
                     'name': f"{alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno}",
                     'grade': f"{alumno.grado} {alumno.seccion}" if alumno.grado and alumno.seccion else "Sin asignar",
-                    'photo': '👧',
+                    'photo': alumno.foto_perfil or '👧',
                     'attendance': attendance
                 })
             
@@ -173,6 +183,609 @@ class PadreAlumnosView(APIView):
             import traceback
             traceback.print_exc()
             return Response({'error': str(e)}, status=500)
+
+    def _build_attendance_from_detail(self, detalle):
+        teacher_name = 'Sin asignar'
+        curso = 'Sin curso'
+
+        if detalle.fk_asistencia:
+            if detalle.fk_asistencia.fk_personal:
+                personal = detalle.fk_asistencia.fk_personal
+                teacher_name = f"{personal.nombre} {personal.apellido_paterno}"
+
+            if detalle.fk_asistencia.curso:
+                curso = detalle.fk_asistencia.curso
+
+        status = 'absent'
+        if detalle.estado_asistencia:
+            estado_lower = detalle.estado_asistencia.lower()
+            if 'presente' in estado_lower or 'asistio' in estado_lower:
+                status = 'present'
+            elif 'tarde' in estado_lower or 'tardanza' in estado_lower:
+                status = 'late'
+            elif 'ausente' in estado_lower or 'falta' in estado_lower:
+                status = 'absent'
+
+        fecha_str = str(detalle.fk_asistencia.fecha) if detalle.fk_asistencia and detalle.fk_asistencia.fecha else None
+        time_entrada = str(detalle.hora_entrada) if detalle.hora_entrada else None
+        time_salida = str(detalle.fk_asistencia.hora_fin) if detalle.fk_asistencia and detalle.fk_asistencia.hora_fin else None
+
+        return {
+            'date': fecha_str,
+            'status': status,
+            'time': time_entrada,
+            'time_entrada': time_entrada,
+            'time_salida': time_salida,
+            'teacher': teacher_name,
+            'course': curso,
+            'observations': detalle.observacion or '',
+        }
+
+    def _build_attendance_from_marcacion(self, marcacion):
+        local_mark = timezone.localtime(marcacion.hora_marcacion)
+        time_value = local_mark.strftime('%H:%M:%S')
+        dispositivo = (marcacion.tipo_marcacion or '').replace('facial:', '').strip() or 'puesto'
+        status = 'late' if local_mark.time() > self.tardiness_limit else 'present'
+
+        return {
+            'date': local_mark.date().isoformat(),
+            'status': status,
+            'time': time_value,
+            'time_entrada': time_value,
+            'time_salida': None,
+            'teacher': 'Control facial',
+            'course': 'Ingreso',
+            'observations': f"Marcacion facial registrada en {dispositivo}.",
+        }
+
+
+class AdminEnrollmentStudentsView(APIView):
+    def get(self, request):
+        try:
+            alumnos = Alumno.objects.all().order_by('apellido_paterno', 'apellido_materno', 'nombre')
+            students_data = []
+
+            for alumno in alumnos:
+                metrics = AlumnoMetrics.objects.filter(fk_alumno=alumno).order_by('-ultima_captura').first()
+                has_embedding = bool(metrics and metrics.embedding)
+
+                if has_embedding:
+                    template_status = 'complete'
+                elif metrics:
+                    template_status = 'incomplete'
+                else:
+                    template_status = 'pending'
+
+                last_update = '--'
+                if metrics and metrics.ultima_captura:
+                    last_update = timezone.localtime(metrics.ultima_captura).strftime('%d/%m/%Y %H:%M:%S')
+
+                enrolled_by = '--'
+                if metrics and isinstance(metrics.facial_area, dict):
+                    enrolled_by = metrics.facial_area.get('enrolled_by') or '--'
+
+                students_data.append({
+                    'id': str(alumno.pk_alumno),
+                    'name': f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}",
+                    'code': alumno.codigo_alumno,
+                    'dni': alumno.dni,
+                    'grade': alumno.grado or 'Sin asignar',
+                    'section': alumno.seccion or '-',
+                    'status': alumno.estado or 'Sin estado',
+                    'templateStatus': template_status,
+                    'lastUpdate': last_update,
+                    'enrolledBy': enrolled_by,
+                    'hasTemplate': has_embedding,
+                })
+
+            return Response({
+                'students': students_data,
+                'total': len(students_data),
+            })
+        except Exception as e:
+            print(f"ERROR en AdminEnrollmentStudentsView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminEnrollmentTemplateView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    min_images = 3
+    max_images = 5
+    duplicate_threshold = 86.0
+
+    def post(self, request, alumno_id):
+        try:
+            alumno = Alumno.objects.filter(pk_alumno=alumno_id).first()
+            if not alumno:
+                return Response({'error': 'Alumno no encontrado'}, status=404)
+
+            enrolled_by = request.data.get('enrolledBy', '').strip() or 'Administrador'
+            images = request.FILES.getlist('images')
+            if len(images) < self.min_images or len(images) > self.max_images:
+                return Response({
+                    'error': f'Se requieren entre {self.min_images} y {self.max_images} imagenes.'
+                }, status=400)
+
+            descriptors = []
+            facial_areas = []
+            errors = []
+
+            for index, image in enumerate(images, start=1):
+                result = self._process_image(image)
+                if result['error']:
+                    errors.append({
+                        'index': index,
+                        'message': result['error'],
+                    })
+                    continue
+
+                descriptors.append(result['descriptor'])
+                facial_areas.append(result['facial_area'])
+
+            if len(descriptors) < self.min_images:
+                return Response({
+                    'error': 'No se pudieron procesar suficientes imagenes.',
+                    'details': errors,
+                }, status=400)
+
+            embedding = np.mean(np.array(descriptors, dtype=np.float32), axis=0)
+            duplicate_match = self._find_duplicate_face(embedding, alumno.pk_alumno)
+            if duplicate_match:
+                duplicate_alumno = duplicate_match['metrics'].fk_alumno
+                return Response({
+                    'error': 'Este rostro ya fue enrolado para otro alumno.',
+                    'duplicate': {
+                        'studentId': str(duplicate_alumno.pk_alumno),
+                        'name': f"{duplicate_alumno.apellido_paterno} {duplicate_alumno.apellido_materno}, {duplicate_alumno.nombre}",
+                        'code': duplicate_alumno.codigo_alumno,
+                        'dni': duplicate_alumno.dni,
+                        'score': round(duplicate_match['score'], 2),
+                        'lastUpdate': timezone.localtime(duplicate_match['metrics'].ultima_captura).strftime('%d/%m/%Y %H:%M:%S')
+                            if duplicate_match['metrics'].ultima_captura else '--',
+                        'enrolledBy': duplicate_match['metrics'].facial_area.get('enrolled_by', '--')
+                            if isinstance(duplicate_match['metrics'].facial_area, dict) else '--',
+                    },
+                    'details': [
+                        {'message': f"Coincide con {duplicate_alumno.apellido_paterno} {duplicate_alumno.apellido_materno}, {duplicate_alumno.nombre}"},
+                        {'message': f"Codigo: {duplicate_alumno.codigo_alumno}"},
+                        {'message': f"DNI: {duplicate_alumno.dni}"},
+                        {'message': f"Similitud: {round(duplicate_match['score'], 2)}%"},
+                    ],
+                }, status=409)
+
+            metrics = AlumnoMetrics.objects.filter(fk_alumno=alumno).order_by('-ultima_captura').first()
+            if not metrics:
+                metrics = AlumnoMetrics(fk_alumno=alumno)
+
+            metrics.embedding = embedding.round(6).tolist()
+            metrics.facial_area = {
+                'samples': facial_areas,
+                'processed_images': len(descriptors),
+                'enrolled_by': enrolled_by,
+            }
+            metrics.porcentaje_similitud = 100.0
+            metrics.ultima_captura = timezone.now()
+            metrics.save()
+
+            return Response({
+                'message': 'Plantilla facial guardada correctamente.',
+                'student': {
+                    'id': str(alumno.pk_alumno),
+                    'name': f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}",
+                    'code': alumno.codigo_alumno,
+                },
+                'template': {
+                    'id': metrics.pk_alumno_metrics,
+                    'processedImages': len(descriptors),
+                    'lastUpdate': timezone.localtime(metrics.ultima_captura).strftime('%d/%m/%Y %H:%M:%S'),
+                    'enrolledBy': enrolled_by,
+                },
+                'warnings': errors,
+            })
+        except Exception as e:
+            print(f"ERROR en AdminEnrollmentTemplateView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+    def delete(self, request, alumno_id):
+        try:
+            alumno = Alumno.objects.filter(pk_alumno=alumno_id).first()
+            if not alumno:
+                return Response({'error': 'Alumno no encontrado'}, status=404)
+
+            deleted_count, _ = AlumnoMetrics.objects.filter(fk_alumno=alumno).delete()
+            if deleted_count == 0:
+                return Response({'error': 'El alumno no tiene enrolamiento para quitar.'}, status=404)
+
+            return Response({
+                'message': 'Enrolamiento facial quitado correctamente.',
+                'student': {
+                    'id': str(alumno.pk_alumno),
+                    'name': f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}",
+                    'code': alumno.codigo_alumno,
+                },
+            })
+        except Exception as e:
+            print(f"ERROR en AdminEnrollmentTemplateView DELETE: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+    def _find_duplicate_face(self, embedding, current_alumno_id):
+        metrics_qs = (
+            AlumnoMetrics.objects
+            .filter(embedding__isnull=False)
+            .exclude(fk_alumno_id=current_alumno_id)
+            .select_related('fk_alumno')
+        )
+        candidate_descriptor = np.array(embedding, dtype=np.float32)
+        best_match = None
+
+        for metrics in metrics_qs:
+            try:
+                stored_descriptor = np.array(metrics.embedding, dtype=np.float32)
+            except (TypeError, ValueError):
+                continue
+
+            if stored_descriptor.shape != candidate_descriptor.shape:
+                continue
+
+            score = self._cosine_score(candidate_descriptor, stored_descriptor)
+            if score is None:
+                continue
+
+            if not best_match or score > best_match['score']:
+                best_match = {
+                    'score': score,
+                    'metrics': metrics,
+                }
+
+        if best_match and best_match['score'] >= self.duplicate_threshold:
+            return best_match
+
+        return None
+
+    def _cosine_score(self, first_descriptor, second_descriptor):
+        denominator = float(np.linalg.norm(first_descriptor) * np.linalg.norm(second_descriptor))
+        if denominator <= 0:
+            return None
+
+        cosine_similarity = float(np.dot(first_descriptor, second_descriptor) / denominator)
+        return max(0.0, min(100.0, cosine_similarity * 100.0))
+
+    def _process_image(self, image):
+        content_type = (image.content_type or '').lower()
+        if content_type not in {'image/jpeg', 'image/jpg', 'image/png'}:
+            return {'error': 'Formato no permitido. Use JPG o PNG.'}
+
+        file_bytes = np.frombuffer(image.read(), np.uint8)
+        frame = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        if frame is None:
+            return {'error': 'Archivo de imagen invalido.'}
+
+        height, width = frame.shape[:2]
+        if width < 320 or height < 240:
+            return {'error': 'Resolucion muy baja. Use al menos 320x240.'}
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+        )
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
+
+        if len(faces) == 0:
+            return {'error': 'No se detecto un rostro frontal.'}
+        if len(faces) > 1:
+            return {'error': 'Se detecto mas de un rostro.'}
+
+        x, y, w, h = [int(value) for value in faces[0]]
+        face = gray[y:y + h, x:x + w]
+        if face.size == 0:
+            return {'error': 'No se pudo recortar el rostro.'}
+
+        blur_score = cv2.Laplacian(face, cv2.CV_64F).var()
+        if blur_score < 35:
+            return {'error': 'La imagen esta borrosa.'}
+
+        brightness = float(np.mean(face))
+        if brightness < 45 or brightness > 220:
+            return {'error': 'La iluminacion no es adecuada.'}
+
+        normalized_face = cv2.equalizeHist(cv2.resize(face, (16, 16)))
+        descriptor = (normalized_face.astype(np.float32) / 255.0).flatten()
+
+        return {
+            'error': None,
+            'descriptor': descriptor.tolist(),
+            'facial_area': {
+                'x': x,
+                'y': y,
+                'w': w,
+                'h': h,
+                'image_width': width,
+                'image_height': height,
+                'blur_score': round(float(blur_score), 2),
+                'brightness': round(brightness, 2),
+            },
+        }
+
+
+class AdminFaceMatchView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+    match_threshold = 86.0
+
+    def post(self, request):
+        try:
+            image = request.FILES.get('image')
+            if not image:
+                return Response({'error': 'Imagen requerida.'}, status=400)
+
+            processor = AdminEnrollmentTemplateView()
+            result = processor._process_image(image)
+            if result['error']:
+                return Response({'error': result['error']}, status=400)
+
+            captured_descriptor = np.array(result['descriptor'], dtype=np.float32)
+            metrics_qs = AlumnoMetrics.objects.filter(embedding__isnull=False).select_related('fk_alumno')
+            best_match = None
+
+            for metrics in metrics_qs:
+                try:
+                    stored_descriptor = np.array(metrics.embedding, dtype=np.float32)
+                except (TypeError, ValueError):
+                    continue
+
+                if stored_descriptor.shape != captured_descriptor.shape:
+                    continue
+
+                distance = float(np.linalg.norm(captured_descriptor - stored_descriptor))
+                denominator = float(np.linalg.norm(captured_descriptor) * np.linalg.norm(stored_descriptor))
+                if denominator <= 0:
+                    continue
+
+                cosine_similarity = float(np.dot(captured_descriptor, stored_descriptor) / denominator)
+                score = max(0.0, min(100.0, cosine_similarity * 100.0))
+
+                if not best_match or score > best_match['score']:
+                    best_match = {
+                        'score': score,
+                        'distance': distance,
+                        'metrics': metrics,
+                    }
+
+            if not best_match:
+                return Response({
+                    'matched': False,
+                    'score': 0,
+                    'message': 'No hay plantillas faciales disponibles para comparar.',
+                })
+
+            metrics = best_match['metrics']
+            alumno = metrics.fk_alumno
+            matched = best_match['score'] >= self.match_threshold
+
+            if matched:
+                Marcacion.objects.create(
+                    dni=alumno.dni,
+                    hora_marcacion=timezone.now(),
+                    tipo_marcacion=f"facial:{request.data.get('deviceId', 'puesto')}"[:30],
+                )
+
+            return Response({
+                'matched': matched,
+                'score': round(best_match['score'], 2),
+                'distance': round(best_match['distance'], 4),
+                'threshold': self.match_threshold,
+                'student': {
+                    'id': str(alumno.pk_alumno),
+                    'name': f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}",
+                    'code': alumno.codigo_alumno,
+                    'dni': alumno.dni,
+                    'grade': alumno.grado or '',
+                    'section': alumno.seccion or '',
+                } if matched else None,
+                'time': timezone.localtime(timezone.now()).strftime('%H:%M:%S'),
+                'message': 'Rostro verificado correctamente.' if matched else 'Rostro detectado, pero no supera el umbral de coincidencia.',
+            })
+        except Exception as e:
+            print(f"ERROR en AdminFaceMatchView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminTodayCaptureRecordsView(APIView):
+    def get(self, request):
+        try:
+            today = timezone.localdate()
+            marcaciones = Marcacion.objects.filter(
+                hora_marcacion__date=today,
+                tipo_marcacion__startswith='facial:'
+            ).order_by('-hora_marcacion')
+
+            records = []
+            for marcacion in marcaciones:
+                alumno = Alumno.objects.filter(dni=marcacion.dni).first()
+                student_name = f"DNI {marcacion.dni}"
+                if alumno:
+                    student_name = f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre} ({alumno.codigo_alumno})"
+
+                records.append({
+                    'id': str(marcacion.pk_marcacion),
+                    'time': timezone.localtime(marcacion.hora_marcacion).strftime('%H:%M:%S'),
+                    'student': student_name,
+                    'result': 'verified',
+                    'score': 100.0,
+                    'message': 'Marcacion facial registrada hoy.',
+                })
+
+            return Response({
+                'date': str(today),
+                'records': records,
+            })
+        except Exception as e:
+            print(f"ERROR en AdminTodayCaptureRecordsView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+
+class AdminAttendanceDashboardView(APIView):
+    tardiness_limit = time(7, 45)
+
+    def get(self, request):
+        try:
+            selected_date = self._parse_date(request.GET.get('date'))
+            next_date = selected_date + timedelta(days=1)
+            selected_grade = request.GET.get('grade')
+            selected_section = request.GET.get('section')
+            selected_device = request.GET.get('device')
+
+            marcaciones = Marcacion.objects.filter(
+                hora_marcacion__gte=selected_date,
+                hora_marcacion__lt=next_date,
+                tipo_marcacion__startswith='facial:',
+            ).order_by('-hora_marcacion')
+            if selected_device and selected_device != 'all':
+                marcaciones = marcaciones.filter(tipo_marcacion=f'facial:{selected_device}')
+
+            yesterday = selected_date - timedelta(days=1)
+            yesterday_next = selected_date
+            yesterday_marcaciones = Marcacion.objects.filter(
+                hora_marcacion__gte=yesterday,
+                hora_marcacion__lt=yesterday_next,
+                tipo_marcacion__startswith='facial:',
+            )
+            if selected_device and selected_device != 'all':
+                yesterday_marcaciones = yesterday_marcaciones.filter(tipo_marcacion=f'facial:{selected_device}')
+
+            students_qs = Alumno.objects.all()
+            if selected_grade and selected_grade != 'all':
+                students_qs = students_qs.filter(grado=selected_grade)
+            if selected_section and selected_section != 'all':
+                students_qs = students_qs.filter(seccion=selected_section)
+            allowed_dnis = set(students_qs.values_list('dni', flat=True))
+
+            unique_present_dnis = set(marcaciones.values_list('dni', flat=True)) & allowed_dnis
+            unique_yesterday_dnis = set(yesterday_marcaciones.values_list('dni', flat=True)) & allowed_dnis
+            total_students = students_qs.count()
+            present_today = len(unique_present_dnis)
+            present_yesterday = len(unique_yesterday_dnis)
+            late_today = self._count_late(unique_present_dnis, selected_date)
+            late_yesterday = self._count_late(unique_yesterday_dnis, yesterday)
+            absences_today = max(total_students - present_today, 0)
+            absences_yesterday = max(total_students - present_yesterday, 0)
+
+            recent_events = []
+            filtered_marcaciones = [marcacion for marcacion in marcaciones if marcacion.dni in allowed_dnis]
+            for marcacion in filtered_marcaciones[:10]:
+                alumno = Alumno.objects.filter(dni=marcacion.dni).first()
+                device = self._device_label(marcacion.tipo_marcacion)
+                local_time = timezone.localtime(marcacion.hora_marcacion)
+                score = 100.0
+                result = 'OK' if local_time.time() <= self.tardiness_limit else 'Observado'
+
+                recent_events.append({
+                    'id': str(marcacion.pk_marcacion),
+                    'time': local_time.strftime('%H:%M:%S'),
+                    'student': self._student_name(alumno, marcacion.dni),
+                    'code': alumno.codigo_alumno if alumno else '--',
+                    'device': device,
+                    'result': result,
+                    'score': score,
+                    'liveness': True,
+                })
+
+            return Response({
+                'stats': {
+                    'attendanceToday': present_today,
+                    'lateArrivals': late_today,
+                    'absences': absences_today,
+                    'totalEvents': marcaciones.count(),
+                    'trend': {
+                        'attendance': self._trend_percent(present_today, present_yesterday),
+                        'lateArrivals': self._trend_percent(late_today, late_yesterday),
+                    'absences': self._trend_percent(absences_today, absences_yesterday),
+                    },
+                },
+                'recentEvents': recent_events,
+                'filters': {
+                    'grades': self._distinct_values('grado'),
+                    'sections': self._distinct_values('seccion'),
+                    'devices': self._distinct_devices(),
+                },
+                'date': str(selected_date),
+            })
+        except Exception as e:
+            print(f"ERROR en AdminAttendanceDashboardView: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return Response({'error': str(e)}, status=500)
+
+    def _parse_date(self, value):
+        if not value or value == 'today':
+            return timezone.localdate()
+        if value == 'yesterday':
+            return timezone.localdate() - timedelta(days=1)
+
+        try:
+            return datetime.strptime(value, '%Y-%m-%d').date()
+        except ValueError:
+            return timezone.localdate()
+
+    def _count_late(self, dnis, selected_date):
+        if not dnis:
+            return 0
+
+        count = 0
+        for dni in dnis:
+            first_mark = Marcacion.objects.filter(
+                dni=dni,
+                hora_marcacion__date=selected_date,
+                tipo_marcacion__startswith='facial:',
+            ).order_by('hora_marcacion').first()
+            if first_mark and timezone.localtime(first_mark.hora_marcacion).time() > self.tardiness_limit:
+                count += 1
+        return count
+
+    def _trend_percent(self, current, previous):
+        if previous == 0:
+            return 100 if current > 0 else 0
+        return round(((current - previous) / previous) * 100)
+
+    def _distinct_values(self, field_name):
+        return [
+            value for value in
+            Alumno.objects.exclude(**{f'{field_name}__isnull': True})
+            .exclude(**{field_name: ''})
+            .order_by(field_name)
+            .values_list(field_name, flat=True)
+            .distinct()
+        ]
+
+    def _distinct_devices(self):
+        devices = []
+        for value in (
+            Marcacion.objects.filter(tipo_marcacion__startswith='facial:')
+            .order_by('tipo_marcacion')
+            .values_list('tipo_marcacion', flat=True)
+            .distinct()
+        ):
+            devices.append(self._device_label(value))
+        return devices
+
+    def _device_label(self, tipo_marcacion):
+        if not tipo_marcacion:
+            return 'Puesto'
+        return tipo_marcacion.replace('facial:', '') or 'Puesto'
+
+    def _student_name(self, alumno, dni):
+        if not alumno:
+            return f'DNI {dni}'
+        return f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}"
 
 
 class ProfesorPanelView(APIView):
@@ -1192,6 +1805,19 @@ class PadrePreferenciasView(APIView):
             email = email.strip().lower()
             padre = Padre.objects.filter(email__iexact=email).first()
             if not padre:
+                alumno = Alumno.objects.filter(email__iexact=email).first()
+                if alumno:
+                    return Response({
+                        'telefono': '',
+                        'email': alumno.email or email,
+                        'direccion': '',
+                        'notificaciones_email': True,
+                        'notificaciones_sms': False,
+                        'notificar_asistencia': True,
+                        'notificar_calificaciones': True,
+                        'notificar_comportamiento': True,
+                        'frecuencia_resumen': 'semanal',
+                    })
                 return Response({'error': 'Padre no encontrado'}, status=404)
             
             # Obtener o crear preferencias
@@ -1230,6 +1856,20 @@ class PadrePreferenciasView(APIView):
             email = email.strip().lower()
             padre = Padre.objects.filter(email__iexact=email).first()
             if not padre:
+                alumno = Alumno.objects.filter(email__iexact=email).first()
+                if alumno:
+                    return Response({
+                        'message': 'No hay un perfil de apoderado vinculado para guardar preferencias adicionales.',
+                        'telefono': '',
+                        'email': alumno.email or email,
+                        'direccion': '',
+                        'notificaciones_email': bool(request.data.get('notificaciones_email', True)),
+                        'notificaciones_sms': bool(request.data.get('notificaciones_sms', False)),
+                        'notificar_asistencia': bool(request.data.get('notificar_asistencia', True)),
+                        'notificar_calificaciones': bool(request.data.get('notificar_calificaciones', True)),
+                        'notificar_comportamiento': bool(request.data.get('notificar_comportamiento', True)),
+                        'frecuencia_resumen': request.data.get('frecuencia_resumen', 'semanal'),
+                    })
                 return Response({'error': 'Padre no encontrado'}, status=404)
             
             # Actualizar email del padre si cambió
