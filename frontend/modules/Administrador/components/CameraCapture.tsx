@@ -22,16 +22,10 @@ interface CameraCaptureProps {
   autoMode?: boolean;
 }
 
-interface GuideFrameMetrics {
-  faceInsideGuide: boolean;
-  overlapRatio: number;
-}
-
 export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
-  const guideRef = useRef<HTMLDivElement>(null);
   const processingRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -44,8 +38,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
   const [liveness, setLiveness] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
-  const [detectionHint, setDetectionHint] = useState("Esperando deteccion de rostro...");
-  const [faceInsideGuide, setFaceInsideGuide] = useState(false);
+  const [detectionHint, setDetectionHint] = useState("Esperando deteccion de rostro en pantalla completa...");
 
   useEffect(() => {
     const loadModels = async () => {
@@ -85,8 +78,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
     setStream(null);
     setCameraActive(false);
     setCaptureState("idle");
-    setFaceInsideGuide(false);
-    setDetectionHint("Esperando deteccion de rostro...");
+    setDetectionHint("Esperando deteccion de rostro en pantalla completa...");
   };
 
   useEffect(() => {
@@ -122,7 +114,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       setStream(mediaStream);
       setCameraActive(true);
       setCaptureState("waiting");
-      setDetectionHint("Esperando deteccion de rostro...");
+      setDetectionHint("Esperando deteccion de rostro en pantalla completa...");
 
       const id = setInterval(() => {
         void captureFrame();
@@ -141,59 +133,6 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
     }
   }, [modelsLoaded, deviceId]);
 
-  const getGuideFrameMetrics = (
-    box: faceapi.Box,
-    displayWidth: number,
-    displayHeight: number,
-  ): GuideFrameMetrics => {
-    const previewEl = previewRef.current;
-    const guideEl = guideRef.current;
-
-    if (!previewEl || !guideEl || !displayWidth || !displayHeight) {
-      return { faceInsideGuide: false, overlapRatio: 0 };
-    }
-
-    const previewRect = previewEl.getBoundingClientRect();
-    const guideRect = guideEl.getBoundingClientRect();
-    if (!previewRect.width || !previewRect.height) {
-      return { faceInsideGuide: false, overlapRatio: 0 };
-    }
-
-    const scaleX = previewRect.width / displayWidth;
-    const scaleY = previewRect.height / displayHeight;
-
-    const faceLeft = box.x * scaleX;
-    const faceTop = box.y * scaleY;
-    const faceRight = faceLeft + box.width * scaleX;
-    const faceBottom = faceTop + box.height * scaleY;
-
-    const guideLeft = guideRect.left - previewRect.left;
-    const guideTop = guideRect.top - previewRect.top;
-    const guideRight = guideLeft + guideRect.width;
-    const guideBottom = guideTop + guideRect.height;
-
-    const overlapLeft = Math.max(faceLeft, guideLeft);
-    const overlapTop = Math.max(faceTop, guideTop);
-    const overlapRight = Math.min(faceRight, guideRight);
-    const overlapBottom = Math.min(faceBottom, guideBottom);
-    const overlapWidth = Math.max(0, overlapRight - overlapLeft);
-    const overlapHeight = Math.max(0, overlapBottom - overlapTop);
-    const overlapArea = overlapWidth * overlapHeight;
-    const faceArea = Math.max(1, (faceRight - faceLeft) * (faceBottom - faceTop));
-    const overlapRatio = overlapArea / faceArea;
-
-    const centerX = faceLeft + (faceRight - faceLeft) / 2;
-    const centerY = faceTop + (faceBottom - faceTop) / 2;
-    const faceInsideGuide =
-      centerX >= guideLeft &&
-      centerX <= guideRight &&
-      centerY >= guideTop &&
-      centerY <= guideBottom &&
-      overlapRatio >= 0.55;
-
-    return { faceInsideGuide, overlapRatio };
-  };
-
   const captureFrame = async () => {
     if (!videoRef.current || !modelsLoaded || processingRef.current) {
       return;
@@ -211,9 +150,8 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       );
 
       if (!detection) {
-        setFaceInsideGuide(false);
         setCaptureState("waiting");
-        setDetectionHint("Esperando deteccion de rostro...");
+        setDetectionHint("Esperando deteccion de rostro en pantalla completa...");
         if (onAutoDetect) {
           onAutoDetect(false, 0);
         }
@@ -221,26 +159,10 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       }
 
       const confidence = detection.score * 100;
-      const metrics = getGuideFrameMetrics(
-        detection.box,
-        videoRef.current.videoWidth,
-        videoRef.current.videoHeight,
-      );
-
       setScore(confidence);
-      setFaceInsideGuide(metrics.faceInsideGuide);
-
-      if (!metrics.faceInsideGuide) {
-        setCaptureState("waiting");
-        setDetectionHint("Rostro detectado. Ubique su cara dentro del marco.");
-        if (onAutoDetect) {
-          onAutoDetect(false, confidence);
-        }
-        return;
-      }
 
       setCaptureState("analyzing");
-      setDetectionHint("Reconociendo rostro...");
+      setDetectionHint("Reconociendo rostro en toda la imagen...");
       if (onAutoDetect) {
         onAutoDetect(true, confidence);
       }
@@ -250,7 +172,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
 
         if (confidence > 55) {
           setCaptureState("verified");
-          setDetectionHint("Rostro dentro del marco. Asistencia registrada.");
+          setDetectionHint("Rostro detectado y verificado.");
 
           if (onCapture && videoRef.current && canvasRef.current) {
             const canvas = canvasRef.current;
@@ -269,7 +191,7 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
 
         setTimeout(() => {
           setCaptureState("waiting");
-          setDetectionHint("Esperando deteccion de rostro...");
+          setDetectionHint("Esperando deteccion de rostro en pantalla completa...");
         }, 1800);
       }, 600);
     } catch (err) {
@@ -290,10 +212,10 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
         };
       case "waiting":
         return {
-          color: faceInsideGuide ? "border-cyan-400" : "border-blue-400",
-          icon: <Camera className={`h-16 w-16 ${faceInsideGuide ? "text-cyan-400" : "text-blue-400"}`} />,
+          color: "border-blue-400",
+          icon: <Camera className="h-16 w-16 text-blue-400" />,
           text: detectionHint,
-          bgColor: faceInsideGuide ? "from-cyan-900" : "from-blue-900",
+          bgColor: "from-blue-900",
         };
       case "analyzing":
         return {
@@ -341,25 +263,16 @@ export function CameraCapture({ deviceId, onCapture, onAutoDetect }: CameraCaptu
       </div>
 
       <div ref={previewRef} className="relative aspect-video overflow-hidden rounded-lg bg-black">
-        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
         <canvas ref={canvasRef} className="hidden" />
 
         {cameraActive && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div ref={guideRef} className="relative h-[30rem] w-96 max-h-[88%] max-w-[70%]">
-              <div className={`absolute inset-0 rounded-lg border-4 transition-colors ${stateConfig.color}`}>
-                <div className="absolute left-0 top-0 h-8 w-8 border-l-4 border-t-4 border-white" />
-                <div className="absolute right-0 top-0 h-8 w-8 border-r-4 border-t-4 border-white" />
-                <div className="absolute bottom-0 left-0 h-8 w-8 border-b-4 border-l-4 border-white" />
-                <div className="absolute bottom-0 right-0 h-8 w-8 border-b-4 border-r-4 border-white" />
-              </div>
-
-              {captureState !== "waiting" && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {stateConfig.icon}
-                </div>
-              )}
-            </div>
+          <div className="pointer-events-none absolute inset-0">
+            <div className={`absolute inset-0 rounded-lg border-4 transition-colors ${stateConfig.color}`} />
+            <div className="absolute left-4 right-4 top-4 h-px bg-white/20" />
+            <div className="absolute left-4 right-4 bottom-4 h-px bg-white/20" />
+            <div className="absolute left-4 top-4 w-px bg-white/20" style={{ height: 'calc(100% - 2rem)' }} />
+            <div className="absolute right-4 top-4 w-px bg-white/20" style={{ height: 'calc(100% - 2rem)' }} />
           </div>
         )}
 

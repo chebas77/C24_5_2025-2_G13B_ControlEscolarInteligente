@@ -229,6 +229,23 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Email notifications
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = env_bool('EMAIL_USE_TLS', True)
+EMAIL_USE_SSL = env_bool('EMAIL_USE_SSL', False)
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@feyalegria39.local')
+
+# SMS notifications
+SMS_BACKEND = os.getenv('SMS_BACKEND', 'console')
+SMS_FROM_NUMBER = os.getenv('SMS_FROM_NUMBER', '')
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN', '')
+TWILIO_FROM_NUMBER = os.getenv('TWILIO_FROM_NUMBER', '')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

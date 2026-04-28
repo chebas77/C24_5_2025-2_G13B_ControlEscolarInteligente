@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import Padre, Alumno, AlumnoMetrics, AsistenciaDetalle, Asistencia, NotificacionPadre, PersonalEducativo, Comunicado, PreferenciasPadre, Marcacion
+from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -20,8 +21,40 @@ from reportlab.pdfbase.ttfonts import TTFont
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.conf import settings
+from .services import send_attendance_email_notification, send_attendance_sms_notification
 import cv2
 import numpy as np
+
+
+CAPTURE_MODES = {'entrada', 'salida'}
+
+
+def _normalize_capture_mode(mode):
+    normalized = (mode or 'entrada').strip().lower()
+    return normalized if normalized in CAPTURE_MODES else 'entrada'
+
+
+def _capture_tipo(mode):
+    return f"facial:{_normalize_capture_mode(mode)}"
+
+
+def _capture_label(tipo_marcacion):
+    if not tipo_marcacion:
+        return 'Puesto'
+
+    raw_value = str(tipo_marcacion)
+    if raw_value.startswith('facial:'):
+        raw_value = raw_value[len('facial:'):]
+
+    parts = raw_value.split(':', 1)
+    if parts[0] in CAPTURE_MODES:
+        mode = parts[0].capitalize()
+        if len(parts) > 1 and parts[1]:
+            return f"{mode} - {parts[1]}"
+        return mode
+
+    return raw_value or 'Puesto'
+
 
 class PadreLoginView(APIView):
     def post(self, request):
@@ -224,7 +257,7 @@ class PadreAlumnosView(APIView):
     def _build_attendance_from_marcacion(self, marcacion):
         local_mark = timezone.localtime(marcacion.hora_marcacion)
         time_value = local_mark.strftime('%H:%M:%S')
-        dispositivo = (marcacion.tipo_marcacion or '').replace('facial:', '').strip() or 'puesto'
+        dispositivo = _capture_label(marcacion.tipo_marcacion)
         status = 'late' if local_mark.time() > self.tardiness_limit else 'present'
 
         return {
@@ -516,6 +549,7 @@ class AdminEnrollmentTemplateView(APIView):
 class AdminFaceMatchView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     match_threshold = 86.0
+    tardiness_limit = time(7, 45)
 
     def post(self, request):
         try:
@@ -568,10 +602,33 @@ class AdminFaceMatchView(APIView):
             matched = best_match['score'] >= self.match_threshold
 
             if matched:
-                Marcacion.objects.create(
+                capture_mode = _normalize_capture_mode(request.data.get('captureMode'))
+                device_label = capture_mode.capitalize()
+                marcacion = Marcacion.objects.create(
                     dni=alumno.dni,
                     hora_marcacion=timezone.now(),
-                    tipo_marcacion=f"facial:{request.data.get('deviceId', 'puesto')}"[:30],
+                    tipo_marcacion=_capture_tipo(capture_mode)[:30],
+                )
+
+                local_time = timezone.localtime(marcacion.hora_marcacion)
+                event_type = 'salida' if capture_mode == 'salida' else ('tardanza' if local_time.time() > self.tardiness_limit else 'entrada')
+                transaction.on_commit(
+                    lambda: send_attendance_email_notification(
+                        alumno=alumno,
+                        event_type=event_type,
+                        occurred_at=marcacion.hora_marcacion,
+                        device_label=device_label,
+                        extra_message='Marcacion facial verificada correctamente.',
+                    )
+                )
+                transaction.on_commit(
+                    lambda: send_attendance_sms_notification(
+                        alumno=alumno,
+                        event_type=event_type,
+                        occurred_at=marcacion.hora_marcacion,
+                        device_label=device_label,
+                        extra_message='Marcacion facial verificada correctamente.',
+                    )
                 )
 
             return Response({
@@ -588,6 +645,7 @@ class AdminFaceMatchView(APIView):
                     'section': alumno.seccion or '',
                 } if matched else None,
                 'time': timezone.localtime(timezone.now()).strftime('%H:%M:%S'),
+                'eventType': 'salida' if matched and _normalize_capture_mode(request.data.get('captureMode')) == 'salida' else ('entrada' if matched else None),
                 'message': 'Rostro verificado correctamente.' if matched else 'Rostro detectado, pero no supera el umbral de coincidencia.',
             })
         except Exception as e:
@@ -612,14 +670,17 @@ class AdminTodayCaptureRecordsView(APIView):
                 student_name = f"DNI {marcacion.dni}"
                 if alumno:
                     student_name = f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre} ({alumno.codigo_alumno})"
+                capture_label = _capture_label(marcacion.tipo_marcacion)
+                event_type = 'salida' if capture_label.lower().startswith('salida') else 'entrada'
 
                 records.append({
                     'id': str(marcacion.pk_marcacion),
                     'time': timezone.localtime(marcacion.hora_marcacion).strftime('%H:%M:%S'),
+                    'eventType': event_type,
                     'student': student_name,
                     'result': 'verified',
                     'score': 100.0,
-                    'message': 'Marcacion facial registrada hoy.',
+                    'message': f"Marcacion facial de {capture_label.lower()} registrada hoy.",
                 })
 
             return Response({
@@ -778,9 +839,7 @@ class AdminAttendanceDashboardView(APIView):
         return devices
 
     def _device_label(self, tipo_marcacion):
-        if not tipo_marcacion:
-            return 'Puesto'
-        return tipo_marcacion.replace('facial:', '') or 'Puesto'
+        return _capture_label(tipo_marcacion)
 
     def _student_name(self, alumno, dni):
         if not alumno:
@@ -1800,10 +1859,33 @@ class PadrePreferenciasView(APIView):
     GET: Obtener preferencias actuales
     PUT: Actualizar preferencias
     """
+    @staticmethod
+    def _as_bool(value, default=False):
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "t", "yes", "y", "on", "si", "sí"}
+        return bool(value)
+
+    def _resolve_padre(self, email):
+        padre = Padre.objects.filter(email__iexact=email).first()
+        if padre:
+            return padre
+
+        alumno = Alumno.objects.filter(email__iexact=email).select_related('fk_codigo_familia').first()
+        if not alumno or not alumno.fk_codigo_familia_id:
+            return None
+
+        return Padre.objects.filter(fk_codigo_familia=alumno.fk_codigo_familia).order_by('pk_padre').first()
+
     def get(self, request, email):
         try:
             email = email.strip().lower()
-            padre = Padre.objects.filter(email__iexact=email).first()
+            padre = self._resolve_padre(email)
             if not padre:
                 alumno = Alumno.objects.filter(email__iexact=email).first()
                 if alumno:
@@ -1813,6 +1895,10 @@ class PadrePreferenciasView(APIView):
                         'direccion': '',
                         'notificaciones_email': True,
                         'notificaciones_sms': False,
+                        'notificar_entrada': True,
+                        'notificar_salida': True,
+                        'notificar_tardanza': True,
+                        'notificar_ausencia': True,
                         'notificar_asistencia': True,
                         'notificar_calificaciones': True,
                         'notificar_comportamiento': True,
@@ -1827,6 +1913,10 @@ class PadrePreferenciasView(APIView):
                     'telefono': padre.celular or '',
                     'notificaciones_email': True,
                     'notificaciones_sms': False,
+                    'notificar_entrada': True,
+                    'notificar_salida': True,
+                    'notificar_tardanza': True,
+                    'notificar_ausencia': True,
                     'notificar_asistencia': True,
                     'notificar_calificaciones': True,
                     'notificar_comportamiento': True,
@@ -1840,6 +1930,10 @@ class PadrePreferenciasView(APIView):
                 'direccion': preferencias.direccion or '',
                 'notificaciones_email': preferencias.notificaciones_email,
                 'notificaciones_sms': preferencias.notificaciones_sms,
+                'notificar_entrada': preferencias.notificar_entrada,
+                'notificar_salida': preferencias.notificar_salida,
+                'notificar_tardanza': preferencias.notificar_tardanza,
+                'notificar_ausencia': preferencias.notificar_ausencia,
                 'notificar_asistencia': preferencias.notificar_asistencia,
                 'notificar_calificaciones': preferencias.notificar_calificaciones,
                 'notificar_comportamiento': preferencias.notificar_comportamiento,
@@ -1854,23 +1948,20 @@ class PadrePreferenciasView(APIView):
     def put(self, request, email):
         try:
             email = email.strip().lower()
-            padre = Padre.objects.filter(email__iexact=email).first()
+            padre = self._resolve_padre(email)
             if not padre:
                 alumno = Alumno.objects.filter(email__iexact=email).first()
                 if alumno:
-                    return Response({
-                        'message': 'No hay un perfil de apoderado vinculado para guardar preferencias adicionales.',
-                        'telefono': '',
-                        'email': alumno.email or email,
-                        'direccion': '',
-                        'notificaciones_email': bool(request.data.get('notificaciones_email', True)),
-                        'notificaciones_sms': bool(request.data.get('notificaciones_sms', False)),
-                        'notificar_asistencia': bool(request.data.get('notificar_asistencia', True)),
-                        'notificar_calificaciones': bool(request.data.get('notificar_calificaciones', True)),
-                        'notificar_comportamiento': bool(request.data.get('notificar_comportamiento', True)),
-                        'frecuencia_resumen': request.data.get('frecuencia_resumen', 'semanal'),
-                    })
-                return Response({'error': 'Padre no encontrado'}, status=404)
+                    padre = Padre.objects.create(
+                        nombre=alumno.nombre[:50] or 'Apoderado',
+                        apellido_paterno=alumno.apellido_paterno[:50] or 'Alumno',
+                        apellido_materno=alumno.apellido_materno[:50] or '',
+                        dni=alumno.dni,
+                        email=email,
+                        fk_codigo_familia=alumno.fk_codigo_familia,
+                    )
+                else:
+                    return Response({'error': 'Padre no encontrado'}, status=404)
             
             # Actualizar email del padre si cambió
             new_email = request.data.get('email')
@@ -1890,11 +1981,15 @@ class PadrePreferenciasView(APIView):
             # Actualizar preferencias
             preferencias.telefono = request.data.get('telefono', preferencias.telefono)
             preferencias.direccion = request.data.get('direccion', preferencias.direccion)
-            preferencias.notificaciones_email = request.data.get('notificaciones_email', preferencias.notificaciones_email)
-            preferencias.notificaciones_sms = request.data.get('notificaciones_sms', preferencias.notificaciones_sms)
-            preferencias.notificar_asistencia = request.data.get('notificar_asistencia', preferencias.notificar_asistencia)
-            preferencias.notificar_calificaciones = request.data.get('notificar_calificaciones', preferencias.notificar_calificaciones)
-            preferencias.notificar_comportamiento = request.data.get('notificar_comportamiento', preferencias.notificar_comportamiento)
+            preferencias.notificaciones_email = self._as_bool(request.data.get('notificaciones_email'), preferencias.notificaciones_email)
+            preferencias.notificaciones_sms = self._as_bool(request.data.get('notificaciones_sms'), preferencias.notificaciones_sms)
+            preferencias.notificar_entrada = self._as_bool(request.data.get('notificar_entrada'), preferencias.notificar_entrada)
+            preferencias.notificar_salida = self._as_bool(request.data.get('notificar_salida'), preferencias.notificar_salida)
+            preferencias.notificar_tardanza = self._as_bool(request.data.get('notificar_tardanza'), preferencias.notificar_tardanza)
+            preferencias.notificar_ausencia = self._as_bool(request.data.get('notificar_ausencia'), preferencias.notificar_ausencia)
+            preferencias.notificar_asistencia = self._as_bool(request.data.get('notificar_asistencia'), preferencias.notificar_asistencia)
+            preferencias.notificar_calificaciones = self._as_bool(request.data.get('notificar_calificaciones'), preferencias.notificar_calificaciones)
+            preferencias.notificar_comportamiento = self._as_bool(request.data.get('notificar_comportamiento'), preferencias.notificar_comportamiento)
             preferencias.frecuencia_resumen = request.data.get('frecuencia_resumen', preferencias.frecuencia_resumen)
             
             preferencias.save()
@@ -1906,6 +2001,10 @@ class PadrePreferenciasView(APIView):
                 'direccion': preferencias.direccion,
                 'notificaciones_email': preferencias.notificaciones_email,
                 'notificaciones_sms': preferencias.notificaciones_sms,
+                'notificar_entrada': preferencias.notificar_entrada,
+                'notificar_salida': preferencias.notificar_salida,
+                'notificar_tardanza': preferencias.notificar_tardanza,
+                'notificar_ausencia': preferencias.notificar_ausencia,
                 'notificar_asistencia': preferencias.notificar_asistencia,
                 'notificar_calificaciones': preferencias.notificar_calificaciones,
                 'notificar_comportamiento': preferencias.notificar_comportamiento,

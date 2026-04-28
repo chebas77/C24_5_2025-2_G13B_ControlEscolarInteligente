@@ -219,6 +219,19 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
       });
 
       if (response.ok) {
+        const refreshed = await fetch(`http://localhost:8000/api/reports/padres/${userEmail}/preferencias/`);
+        const refreshedData = await refreshed.json();
+        setParentProfile({
+          telefono: refreshedData.telefono || "",
+          email: refreshedData.email || userEmail,
+          direccion: refreshedData.direccion || "",
+          notificaciones_email: refreshedData.notificaciones_email ?? true,
+          notificaciones_sms: refreshedData.notificaciones_sms ?? false,
+          notificar_asistencia: refreshedData.notificar_asistencia ?? true,
+          notificar_calificaciones: refreshedData.notificar_calificaciones ?? true,
+          notificar_comportamiento: refreshedData.notificar_comportamiento ?? true,
+          frecuencia_resumen: refreshedData.frecuencia_resumen || "semanal"
+        });
         setSettingsOpen(false);
         // Aquí podrías mostrar un mensaje de éxito
       } else {

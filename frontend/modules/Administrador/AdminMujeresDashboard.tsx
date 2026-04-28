@@ -27,19 +27,23 @@ interface DashboardMujeresProps {
 }
 
 type View = 'dashboard' | 'devices' | 'capture' | 'enrollment' | 'policies' | 'reports';
+type CaptureMode = 'entrada' | 'salida';
 
 export function AdminMujeresDashboard({ userEmail, onLogout }: DashboardMujeresProps) {
   const [activeView, setActiveView] = useState<View>('dashboard');
   const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [selectedCaptureMode, setSelectedCaptureMode] = useState<CaptureMode>('entrada');
 
-  const handleOpenCapture = (deviceId: string) => {
+  const handleOpenCapture = (deviceId: string, stationMode: CaptureMode) => {
     setSelectedDevice(deviceId);
+    setSelectedCaptureMode(stationMode);
     setActiveView('capture');
   };
 
   const handleBackToDevices = () => {
     setActiveView('devices');
     setSelectedDevice('');
+    setSelectedCaptureMode('entrada');
   };
 
   return (
@@ -107,7 +111,7 @@ export function AdminMujeresDashboard({ userEmail, onLogout }: DashboardMujeresP
             {activeView === 'capture' && (
               <TabsTrigger value="capture" className="flex items-center gap-2">
                 <Camera className="h-4 w-4" />
-                Captura
+                {selectedCaptureMode === 'salida' ? 'Salida' : 'Entrada'}
               </TabsTrigger>
             )}
           </TabsList>
@@ -127,6 +131,7 @@ export function AdminMujeresDashboard({ userEmail, onLogout }: DashboardMujeresP
             {activeView === 'capture' && (
               <CaptureStation 
                 deviceId={selectedDevice} 
+                stationMode={selectedCaptureMode}
                 onBack={handleBackToDevices}
               />
             )}

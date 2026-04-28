@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="es">
+  <body style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+    <div style="max-width: 640px; margin: 0 auto; padding: 24px;">
+      <h2 style="margin: 0 0 16px 0; color: #b91c1c;">{{ subject }}</h2>
+      <p style="margin: 0 0 12px 0;">Se registró un evento de asistencia para el estudiante.</p>
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px;">
+        {% for line in body_lines %}
+          <p style="margin: 0 0 8px 0;">{{ line }}</p>
+        {% endfor %}
+      </div>
+      {% if device_label %}
+        <p style="margin-top: 12px; color: #6b7280;">Dispositivo: {{ device_label }}</p>
+      {% endif %}
+      <p style="margin-top: 20px; color: #6b7280; font-size: 12px;">Sistema de control escolar Fe y Alegria N. 39</p>
+    </div>
+  </body>
+</html>

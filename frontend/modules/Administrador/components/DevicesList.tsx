@@ -12,11 +12,13 @@ import {
   Monitor, 
   Plus, 
   Camera,
-  Circle
+  Circle,
+  LogIn,
+  LogOut
 } from "lucide-react";
 
 interface DevicesListProps {
-  onOpenCapture?: (deviceId: string) => void;
+  onOpenCapture?: (deviceId: string, stationMode: "entrada" | "salida") => void;
 }
 
 export function DevicesList({ onOpenCapture }: DevicesListProps) {
@@ -63,11 +65,11 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
     };
   }, []);
 
-  const handleOpenCapture = (deviceId: string) => {
+  const handleOpenCapture = (deviceId: string, stationMode: "entrada" | "salida") => {
     if (onOpenCapture) {
-      onOpenCapture(deviceId);
+      onOpenCapture(deviceId, stationMode);
     } else {
-      router.push(`/captura/${deviceId}`);
+      router.push(`/captura/${deviceId}?mode=${stationMode}`);
     }
   };
 
@@ -175,14 +177,24 @@ export function DevicesList({ onOpenCapture }: DevicesListProps) {
                       {device.deviceId}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleOpenCapture(device.deviceId)}
-                      >
-                        <Camera className="h-3 w-3 mr-1" />
-                        Abrir Puesto
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenCapture(device.deviceId, "entrada")}
+                        >
+                          <LogIn className="h-3 w-3 mr-1" />
+                          Entrada
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenCapture(device.deviceId, "salida")}
+                        >
+                          <LogOut className="h-3 w-3 mr-1" />
+                          Salida
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

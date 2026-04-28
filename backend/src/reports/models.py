@@ -134,11 +134,20 @@ class Marcacion(models.Model):
 
 class NotificacionPadre(models.Model):
     pk_notificacion = models.AutoField(primary_key=True, db_column='pk_notificacion')
+    fk_alumno = models.ForeignKey(Alumno, on_delete=models.CASCADE, db_column='fk_alumno', null=True, blank=True)
     fk_asistencia = models.ForeignKey(Asistencia, on_delete=models.CASCADE, db_column='fk_asistencia', null=True, blank=True)
     fk_codigo_familia = models.ForeignKey(CodigoFamilia, on_delete=models.CASCADE, db_column='fk_codigo_familia', null=True, blank=True)
+    destinatario_email = models.EmailField(max_length=100, null=True, blank=True)
+    destinatario_telefono = models.CharField(max_length=20, null=True, blank=True)
+    asunto = models.CharField(max_length=150, null=True, blank=True)
     mensaje = models.CharField(max_length=200, null=True, blank=True)
+    tipo_evento = models.CharField(max_length=30, null=True, blank=True)
     estado_envio = models.CharField(max_length=20, null=True, blank=True)
     medio_envio = models.CharField(max_length=20, null=True, blank=True)
+    fecha_evento = models.DateField(null=True, blank=True)
+    fecha_envio = models.DateTimeField(null=True, blank=True)
+    intentos = models.IntegerField(default=0)
+    detalle_error = models.CharField(max_length=255, null=True, blank=True)
     
     class Meta:
         db_table = 'notificacion_padre'
@@ -169,6 +178,10 @@ class PreferenciasPadre(models.Model):
     direccion = models.CharField(max_length=200, null=True, blank=True)
     notificaciones_email = models.BooleanField(default=True)
     notificaciones_sms = models.BooleanField(default=False)
+    notificar_entrada = models.BooleanField(default=True)
+    notificar_salida = models.BooleanField(default=True)
+    notificar_tardanza = models.BooleanField(default=True)
+    notificar_ausencia = models.BooleanField(default=True)
     notificar_asistencia = models.BooleanField(default=True)
     notificar_calificaciones = models.BooleanField(default=True)
     notificar_comportamiento = models.BooleanField(default=True)

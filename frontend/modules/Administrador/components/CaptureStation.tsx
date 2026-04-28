@@ -17,12 +17,14 @@ import { CheckCircle2, Clock, Monitor, XCircle } from "lucide-react";
 
 interface CaptureStationProps {
   deviceId: string;
+  stationMode: "entrada" | "salida";
   onBack: () => void;
 }
 
 interface CaptureRecord {
   id: string;
   time: string;
+  eventType?: "entrada" | "salida";
   student: string;
   result: "verified" | "rejected";
   score: number;
@@ -33,6 +35,7 @@ interface MatchResponse {
   matched: boolean;
   score: number;
   time?: string;
+  eventType?: "entrada" | "salida";
   message?: string;
   error?: string;
   student?: {
@@ -50,7 +53,7 @@ interface TodayRecordsResponse {
 
 const API_BASE_URL = "http://localhost:8000/api/reports";
 
-export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
+export function CaptureStation({ deviceId, stationMode, onBack }: CaptureStationProps) {
   const [recentCaptures, setRecentCaptures] = useState<CaptureRecord[]>([]);
   const [currentTime, setCurrentTime] = useState("");
   const [matchStatus, setMatchStatus] = useState("Esperando captura valida...");
@@ -126,6 +129,12 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
     return response.blob();
   };
 
+  const stationTitle = stationMode === "salida" ? "Puesto de Salida" : "Puesto de Entrada";
+  const stationDescription =
+    stationMode === "salida"
+      ? "Alinee su rostro para registrar la salida."
+      : "Alinee su rostro para registrar la entrada.";
+
   const handleCapture = async (imageData: string) => {
     const now = Date.now();
     if (matchingRef.current || now - lastMatchAtRef.current < 3500) {
@@ -142,6 +151,7 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
       const imageBlob = await dataUrlToBlob(imageData);
       formData.append("image", imageBlob, `capture-${now}.jpg`);
       formData.append("deviceId", deviceId);
+      formData.append("captureMode", stationMode);
 
       const response = await fetch(`${API_BASE_URL}/admin/capture/match/`, {
         method: "POST",
@@ -159,6 +169,7 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
       const newCapture: CaptureRecord = {
         id: now.toString(),
         time: data.time || new Date().toLocaleTimeString("es-PE"),
+        eventType: data.eventType,
         student: studentLabel,
         result: data.matched ? "verified" : "rejected",
         score: data.score || 0,
@@ -207,7 +218,7 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-gray-900">Puesto de Captura</h2>
+        <h2 className="text-2xl font-semibold text-gray-900">{stationTitle}</h2>
         <Button variant="outline" onClick={onBack}>
           Volver
         </Button>
@@ -221,6 +232,9 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
         <Badge variant="outline">
           <Clock className="mr-1 h-3 w-3" />
           {currentTime || "--:--:--"}
+        </Badge>
+        <Badge variant="outline">
+          {stationMode === "salida" ? "Salida" : "Entrada"}
         </Badge>
         <Badge
           variant={
@@ -239,9 +253,7 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
       <Card className="border-2 border-gray-300">
         <CardHeader>
           <CardTitle>Verificacion Facial en Vivo</CardTitle>
-          <CardDescription>
-            Alinee su rostro dentro del marco para registrar asistencia
-          </CardDescription>
+          <CardDescription>{stationDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="relative w-full aspect-video overflow-hidden rounded-lg bg-black">
@@ -261,20 +273,21 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
           <CardDescription>Marcaciones faciales guardadas durante el dia</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Hora</TableHead>
-                <TableHead>Estudiante</TableHead>
-                <TableHead>Score</TableHead>
-                <TableHead>Resultado</TableHead>
-                <TableHead>Detalle</TableHead>
-              </TableRow>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Hora</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Estudiante</TableHead>
+                  <TableHead>Score</TableHead>
+                  <TableHead>Resultado</TableHead>
+                  <TableHead>Detalle</TableHead>
+                </TableRow>
             </TableHeader>
             <TableBody>
               {recentCaptures.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-gray-500">
+                  <TableCell colSpan={6} className="py-8 text-center text-gray-500">
                     Aun no hay marcaciones guardadas hoy
                   </TableCell>
                 </TableRow>
@@ -282,6 +295,11 @@ export function CaptureStation({ deviceId, onBack }: CaptureStationProps) {
                 recentCaptures.map((record) => (
                   <TableRow key={record.id}>
                     <TableCell>{record.time}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {record.eventType === "salida" ? "Salida" : "Entrada"}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{record.student}</TableCell>
                     <TableCell>{record.score.toFixed(1)}%</TableCell>
                     <TableCell>

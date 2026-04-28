@@ -82,6 +82,24 @@ const emptyStats: DashboardStats = {
   },
 };
 
+const formatDeviceLabel = (value: string) => {
+  if (!value) {
+    return "Puesto";
+  }
+
+  const raw = value.startsWith("facial:") ? value.slice("facial:".length) : value;
+  const [mode, ...rest] = raw.split(":");
+  if ((mode === "entrada" || mode === "salida") && rest.length > 0) {
+    return `${mode === "entrada" ? "Entrada" : "Salida"} - ${rest.join(":")}`;
+  }
+
+  if (mode === "entrada" || mode === "salida") {
+    return mode === "entrada" ? "Entrada" : "Salida";
+  }
+
+  return raw;
+};
+
 export function AttendanceDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selectedGrade, setSelectedGrade] = useState("all");
@@ -275,7 +293,7 @@ export function AttendanceDashboard() {
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
                   {filterOptions.devices.map((device) => (
-                    <SelectItem key={device} value={device}>{device}</SelectItem>
+                    <SelectItem key={device} value={device}>{formatDeviceLabel(device)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
