@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -21,6 +22,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from django.conf import settings
+from config_app.models import SystemPolicy
 from .services import send_attendance_email_notification, send_attendance_sms_notification
 import cv2
 import numpy as np
@@ -56,6 +58,39 @@ def _capture_label(tipo_marcacion):
     return raw_value or 'Puesto'
 
 
+def _get_or_create_session_user(email, full_name=''):
+    User = get_user_model()
+    normalized_email = (email or '').strip().lower()
+    if not normalized_email:
+        return None
+
+    user, created = User.objects.get_or_create(
+        username=normalized_email[:150],
+        defaults={'email': normalized_email},
+    )
+    user.email = normalized_email
+    user.username = normalized_email[:150]
+    if full_name:
+        parts = full_name.strip().split()
+        user.first_name = parts[0][:150] if parts else ''
+        user.last_name = ' '.join(parts[1:])[:150] if len(parts) > 1 else ''
+    if created or not user.has_usable_password():
+        user.set_unusable_password()
+    user.is_active = True
+    user.is_staff = False
+    user.is_superuser = False
+    user.save()
+    return user
+
+
+def _get_face_match_threshold(default=75.0):
+    try:
+        policy = SystemPolicy.load()
+        return float(policy.face_match_threshold or default)
+    except Exception:
+        return float(default)
+
+
 class PadreLoginView(APIView):
     def post(self, request):
         try:
@@ -66,46 +101,54 @@ class PadreLoginView(APIView):
             
             if not email or not dni_hijo:
                 return Response({'error': 'Email y DNI del hijo son requeridos'}, status=400)
-            
-            # Verificar si el padre existe
-            padre = Padre.objects.filter(email__iexact=email).first()
-            print(f"Padre encontrado: {padre}")
-            
-            if not padre:
-                if email.endswith('@demo.scei.pe') and not Padre.objects.exists():
-                    return Response(
-                        {
-                            'error': (
-                                'Padre no encontrado. No hay datos demo cargados en la base local; '
-                                'ejecuta `python manage.py seed_demo_users --count 20 --reset`.'
-                            )
-                        },
-                        status=404,
-                    )
-                return Response({'error': 'Padre no encontrado'}, status=404)
-            
-            # Verificar si el hijo existe y pertenece a la familia del padre
-            alumno = Alumno.objects.filter(
-                dni=dni_hijo,
-                fk_codigo_familia=padre.fk_codigo_familia
-            ).first()
-            print(f"Alumno encontrado: {alumno}")
-            
+
+            alumno = Alumno.objects.filter(email__iexact=email, dni=dni_hijo).first()
+            padre = None
+
             if not alumno:
-                return Response({'error': 'Hijo no encontrado o no pertenece a esta familia'}, status=404)
-            
-            # Generar tokens JWT
-            refresh = RefreshToken()
-            refresh['email'] = email
+                padre = Padre.objects.filter(email__iexact=email).first()
+                if padre:
+                    alumno = Alumno.objects.filter(
+                        dni=dni_hijo,
+                        fk_codigo_familia=padre.fk_codigo_familia
+                    ).first()
+
+            print(f"Alumno encontrado: {alumno}")
+
+            if not alumno:
+                return Response({'error': 'Alumno no encontrado o DNI inválido'}, status=404)
+
+            session_user = _get_or_create_session_user(
+                alumno.email or email,
+                f"{alumno.apellido_paterno} {alumno.apellido_materno} {alumno.nombre}".strip(),
+            )
+            if not session_user:
+                return Response({'error': 'No se pudo crear la sesión'}, status=500)
+
+            refresh = RefreshToken.for_user(session_user)
+            refresh['email'] = alumno.email or email
             refresh['role'] = 'parent'
             refresh['dni_hijo'] = dni_hijo
-            
-            return Response({
+            refresh['alumno_id'] = alumno.pk_alumno
+            refresh['family_code'] = str(alumno.fk_codigo_familia_id or '')
+
+            alumno_nombre = f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}"
+
+            payload = {
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
-                'email': email,
-                'nombre': f"{padre.nombre} {padre.apellido_paterno}"
-            })
+                'email': alumno.email or email,
+                'nombre': alumno_nombre,
+                'alumno_id': alumno.pk_alumno,
+                'alumno_name': alumno_nombre,
+                'family_label': f"Familia {alumno.apellido_paterno} {alumno.apellido_materno}".strip(),
+                'dni_hijo': dni_hijo,
+            }
+
+            if padre:
+                payload['padre_id'] = padre.pk_padre
+
+            return Response(payload)
         except Exception as e:
             print(f"ERROR en PadreLoginView: {str(e)}")
             import traceback
@@ -118,17 +161,17 @@ class PadreAlumnosView(APIView):
     def get(self, request, email):
         try:
             email = email.strip().lower()
-            print(f"Buscando alumnos para padre: {email}")
-            padre = Padre.objects.filter(email__iexact=email).first()
+            print(f"Buscando alumnos para acceso: {email}")
+            alumno_por_email = Alumno.objects.filter(email__iexact=email).first()
 
-            if padre:
+            if alumno_por_email:
+                alumnos = Alumno.objects.filter(pk_alumno=alumno_por_email.pk_alumno)
+            else:
+                padre = Padre.objects.filter(email__iexact=email).first()
+                if not padre:
+                    return Response({'error': 'Alumno o apoderado no encontrado'}, status=404)
                 print(f"Padre encontrado: {padre.nombre} {padre.apellido_paterno}, Familia: {padre.fk_codigo_familia}")
                 alumnos = Alumno.objects.filter(fk_codigo_familia=padre.fk_codigo_familia)
-            else:
-                alumno_por_email = Alumno.objects.filter(email__iexact=email).first()
-                if not alumno_por_email:
-                    return Response({'error': 'Padre o alumno no encontrado'}, status=404)
-                alumnos = Alumno.objects.filter(pk_alumno=alumno_por_email.pk_alumno)
             print(f"Número de alumnos encontrados: {alumnos.count()}")
             
             alumnos_data = []
@@ -326,7 +369,6 @@ class AdminEnrollmentTemplateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
     min_images = 3
     max_images = 5
-    duplicate_threshold = 86.0
 
     def post(self, request, alumno_id):
         try:
@@ -476,7 +518,7 @@ class AdminEnrollmentTemplateView(APIView):
                     'metrics': metrics,
                 }
 
-        if best_match and best_match['score'] >= self.duplicate_threshold:
+        if best_match and best_match['score'] >= _get_face_match_threshold():
             return best_match
 
         return None
@@ -548,7 +590,6 @@ class AdminEnrollmentTemplateView(APIView):
 
 class AdminFaceMatchView(APIView):
     parser_classes = [MultiPartParser, FormParser]
-    match_threshold = 86.0
     tardiness_limit = time(7, 45)
 
     def post(self, request):
@@ -599,7 +640,8 @@ class AdminFaceMatchView(APIView):
 
             metrics = best_match['metrics']
             alumno = metrics.fk_alumno
-            matched = best_match['score'] >= self.match_threshold
+            match_threshold = _get_face_match_threshold()
+            matched = best_match['score'] >= match_threshold
 
             if matched:
                 capture_mode = _normalize_capture_mode(request.data.get('captureMode'))
@@ -635,7 +677,7 @@ class AdminFaceMatchView(APIView):
                 'matched': matched,
                 'score': round(best_match['score'], 2),
                 'distance': round(best_match['distance'], 4),
-                'threshold': self.match_threshold,
+                'threshold': match_threshold,
                 'student': {
                     'id': str(alumno.pk_alumno),
                     'name': f"{alumno.apellido_paterno} {alumno.apellido_materno}, {alumno.nombre}",

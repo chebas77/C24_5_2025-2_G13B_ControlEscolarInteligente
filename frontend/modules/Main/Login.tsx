@@ -395,9 +395,9 @@ export function LoginModule() {
               <div className="rounded-3xl border border-red-100 bg-[linear-gradient(180deg,rgba(254,242,242,0.9),rgba(255,255,255,1))] p-5 dark:border-red-400/15 dark:bg-[linear-gradient(180deg,rgba(127,29,29,0.12),rgba(30,41,59,0.72))]">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-slate-950 dark:text-white">Acceso para padres y madres</h3>
+                    <h3 className="text-base font-semibold text-slate-950 dark:text-white">Acceso con correo del alumno</h3>
                     <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-400">
-                      Puedes validar el acceso manualmente con el correo del apoderado y el DNI del estudiante. Si usas Google, el sistema toma el correo institucional del alumno y entra al mismo portal.
+                      Puedes validar el acceso manualmente con el correo del alumno y su DNI. Si usas Google, el sistema toma el correo institucional del alumno y entra al mismo portal.
                     </p>
                   </div>
                   <div className="rounded-2xl bg-white p-2.5 text-red-600 shadow-sm dark:bg-slate-900/90 dark:text-red-300">
@@ -407,7 +407,7 @@ export function LoginModule() {
 
                 <form onSubmit={handleParentSubmit} className="mt-5 space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="parent-email">Correo del padre o madre</Label>
+                    <Label htmlFor="parent-email">Correo del alumno</Label>
                     <Input
                       id="parent-email"
                       type="email"
@@ -432,7 +432,7 @@ export function LoginModule() {
                     disabled={parentLoading}
                     className="h-11 w-full rounded-xl bg-red-600 text-white hover:bg-red-700"
                   >
-                    {parentLoading ? "Validando acceso..." : "Ingresar como padre o madre"}
+                    {parentLoading ? "Validando acceso..." : "Ingresar"}
                   </Button>
                 </form>
               </div>

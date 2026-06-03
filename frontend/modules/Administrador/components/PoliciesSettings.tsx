@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
 import { Label } from "@/app/components/ui/label";
@@ -21,20 +21,110 @@ import {
   RotateCcw
 } from "lucide-react";
 
+const API_BASE_URL = "http://localhost:8000/api/config/policies/";
+
 export function PoliciesSettings() {
   const [threshold, setThreshold] = useState([75]);
   const [requireLiveness, setRequireLiveness] = useState(true);
   const [retentionDays, setRetentionDays] = useState([90]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
 
-  const handleSave = () => {
-    // Placeholder para guardar configuración
-    alert('Configuración guardada exitosamente');
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPolicy = async () => {
+      try {
+        const response = await fetch(API_BASE_URL);
+        if (!response.ok) {
+          throw new Error("No se pudo cargar la política.");
+        }
+
+        const data = await response.json() as {
+          face_match_threshold?: number;
+          threshold?: number;
+          require_liveness?: boolean;
+          retention_days?: number;
+        };
+
+        if (cancelled) return;
+
+        const nextThreshold = Number(data.face_match_threshold ?? data.threshold ?? 75);
+        const nextRetentionDays = Number(data.retention_days ?? 90);
+        setThreshold([Number.isFinite(nextThreshold) ? nextThreshold : 75]);
+        setRequireLiveness(data.require_liveness ?? true);
+        setRetentionDays([Number.isFinite(nextRetentionDays) ? nextRetentionDays : 90]);
+      } catch (error) {
+        if (!cancelled) {
+          setStatusMessage(error instanceof Error ? error.message : "No se pudo cargar la política.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadPolicy();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistPolicy = async (
+    nextThreshold: number,
+    nextRequireLiveness: boolean,
+    nextRetentionDays: number,
+  ) => {
+    setIsSaving(true);
+    setStatusMessage("");
+
+    try {
+      const response = await fetch(API_BASE_URL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          face_match_threshold: nextThreshold,
+          require_liveness: nextRequireLiveness,
+          retention_days: nextRetentionDays,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("No se pudo guardar la política.");
+      }
+
+      const data = await response.json() as {
+        face_match_threshold?: number;
+        threshold?: number;
+        require_liveness?: boolean;
+        retention_days?: number;
+      };
+
+      setThreshold([Number(data.face_match_threshold ?? data.threshold ?? nextThreshold)]);
+      setRequireLiveness(data.require_liveness ?? nextRequireLiveness);
+      setRetentionDays([Number(data.retention_days ?? nextRetentionDays)]);
+      setStatusMessage("Configuración guardada correctamente.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "No se pudo guardar la política.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleReset = () => {
+  const handleSave = async () => {
+    await persistPolicy(threshold[0], requireLiveness, retentionDays[0]);
+  };
+
+  const handleReset = async () => {
     setThreshold([75]);
     setRequireLiveness(true);
     setRetentionDays([90]);
+    await persistPolicy(75, true, 90);
   };
 
   return (
@@ -45,6 +135,12 @@ export function PoliciesSettings() {
           Configuración del sistema de verificación facial
         </p>
       </div>
+
+      {statusMessage && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {statusMessage}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Threshold Configuration */}
@@ -83,11 +179,11 @@ export function PoliciesSettings() {
                 </div>
               </div>
 
-              <Slider
-                value={threshold}
-                onValueChange={setThreshold}
-                min={50}
-                max={95}
+                <Slider
+                  value={threshold}
+                  onValueChange={setThreshold}
+                  min={50}
+                  max={95}
                 step={5}
                 className="w-full"
               />
@@ -321,9 +417,9 @@ export function PoliciesSettings() {
           <RotateCcw className="h-4 w-4 mr-2" />
           Restablecer
         </Button>
-        <Button className="bg-red-600 hover:bg-red-700" onClick={handleSave}>
+        <Button className="bg-red-600 hover:bg-red-700" onClick={handleSave} disabled={isLoading || isSaving}>
           <Save className="h-4 w-4 mr-2" />
-          Guardar Cambios
+          {isSaving ? "Guardando..." : "Guardar Cambios"}
         </Button>
       </div>
     </div>
