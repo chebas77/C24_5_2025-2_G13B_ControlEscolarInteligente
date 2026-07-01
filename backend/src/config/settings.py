@@ -104,13 +104,24 @@ TEMPLATES = [
     },
 ]
 ASGI_APPLICATION = 'config.asgi.application'
+
+REDIS_HOST = os.getenv('REDIS_HOST', '127.0.0.1')
+REDIS_PORT = int(os.getenv('REDIS_PORT', '6379'))
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/1',
+    }
 }
 
 WSGI_APPLICATION = 'config.wsgi.application'
@@ -229,7 +240,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# Email notifications
+# Email — rate-limit configurable: max N envíos por destinatario por hora (usa Redis)
+EMAIL_RATE_LIMIT_PER_HOUR = int(os.getenv('EMAIL_RATE_LIMIT_PER_HOUR', '10'))
+
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))

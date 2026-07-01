@@ -8,8 +8,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.mail import EmailMultiAlternatives
-from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
 
@@ -194,25 +194,25 @@ def build_attendance_sms_payload(
     }
 
 
-def _notification_exists(
-    alumno: Alumno,
-    event_type: str,
-    event_date: date,
-    recipient_value: str,
-    medium: str,
-) -> bool:
-    filters = {
-        "fk_alumno": alumno,
-        "tipo_evento": event_type,
-        "fecha_evento": event_date,
-        "medio_envio": medium,
-        "estado_envio": "enviada",
-    }
-    if medium == "sms":
-        filters["destinatario_telefono__iexact"] = recipient_value
-    else:
-        filters["destinatario_email__iexact"] = recipient_value
-    return NotificacionPadre.objects.filter(**filters).exists()
+def _email_notification_exists(alumno: Alumno, event_type: str, event_date: date, email: str) -> bool:
+    return NotificacionPadre.objects.filter(
+        fk_alumno=alumno,
+        tipo_evento=event_type,
+        fecha_evento=event_date,
+        medio_envio="email",
+        estado_envio="enviada",
+        destinatario_email__iexact=email,
+    ).exists()
+
+
+def _email_rate_limit_exceeded(email: str) -> bool:
+    limit = getattr(settings, "EMAIL_RATE_LIMIT_PER_HOUR", 10)
+    cache_key = f"email_rate:{email.lower()}"
+    count = cache.get(cache_key, 0)
+    if count >= limit:
+        return True
+    cache.set(cache_key, count + 1, timeout=3600)
+    return False
 
 
 def send_attendance_email_notification(
@@ -243,7 +243,7 @@ def send_attendance_email_notification(
         if not target.email:
             continue
 
-        if _notification_exists(alumno, event_type, event_date, target.email, "email"):
+        if _email_notification_exists(alumno, event_type, event_date, target.email):
             continue
 
         notification = NotificacionPadre.objects.create(
@@ -263,6 +263,13 @@ def send_attendance_email_notification(
         if not can_send_event_email(target.preference, event_type):
             notification.estado_envio = 'omitida'
             notification.detalle_error = 'Las preferencias del destinatario no permiten este evento.'
+            notification.save(update_fields=['estado_envio', 'detalle_error'])
+            saved_notifications.append(notification)
+            continue
+
+        if _email_rate_limit_exceeded(target.email):
+            notification.estado_envio = 'omitida'
+            notification.detalle_error = f'Límite de {getattr(settings, "EMAIL_RATE_LIMIT_PER_HOUR", 10)} emails/hora alcanzado.'
             notification.save(update_fields=['estado_envio', 'detalle_error'])
             saved_notifications.append(notification)
             continue
@@ -379,9 +386,6 @@ def send_attendance_sms_notification(
             saved_notifications.append(notification)
             continue
 
-        if _notification_exists(alumno, event_type, event_date, target.phone, "sms"):
-            continue
-
         notification = NotificacionPadre.objects.create(
             fk_alumno=alumno,
             fk_codigo_familia=context["fk_codigo_familia"],
@@ -396,13 +400,6 @@ def send_attendance_sms_notification(
             fecha_evento=event_date,
             intentos=0,
         )
-
-        if not can_send_event_sms(target.preference, event_type):
-            notification.estado_envio = 'omitida'
-            notification.detalle_error = 'Las preferencias del destinatario no permiten este evento.'
-            notification.save(update_fields=['estado_envio', 'detalle_error'])
-            saved_notifications.append(notification)
-            continue
 
         try:
             if sms_backend == "twilio":
