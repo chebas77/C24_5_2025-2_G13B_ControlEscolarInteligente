@@ -189,3 +189,196 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Dark-mode compatibility for authenticated modules that still use light Tailwind utilities. */
+.dark .auth-shell {
+  background:
+    radial-gradient(circle at top left, rgba(127, 29, 29, 0.22), transparent 34rem),
+    linear-gradient(180deg, #020617 0%, #0f172a 48%, #111827 100%) !important;
+  color: #e5e7eb;
+}
+
+.dark .auth-shell .bg-white,
+.dark .auth-shell .bg-white\/95,
+.dark .auth-shell [data-slot="card"].bg-white {
+  background-color: rgba(15, 23, 42, 0.94) !important;
+  color: #e5e7eb;
+}
+
+.dark .auth-shell .bg-gray-50,
+.dark .auth-shell .bg-gray-100 {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  color: #e5e7eb;
+}
+
+.dark .auth-shell .bg-red-50,
+.dark .auth-shell .bg-red-100 {
+  background-color: rgba(127, 29, 29, 0.34) !important;
+  color: #fecaca;
+}
+
+.dark .auth-shell .bg-green-50,
+.dark .auth-shell .bg-green-100 {
+  background-color: rgba(20, 83, 45, 0.34) !important;
+  color: #bbf7d0;
+}
+
+.dark .auth-shell .bg-yellow-50,
+.dark .auth-shell .bg-yellow-100 {
+  background-color: rgba(113, 63, 18, 0.38) !important;
+  color: #fde68a;
+}
+
+.dark .auth-shell .bg-blue-50,
+.dark .auth-shell .bg-blue-100 {
+  background-color: rgba(30, 64, 175, 0.34) !important;
+  color: #bfdbfe;
+}
+
+.dark .auth-shell .text-gray-900,
+.dark .auth-shell .text-gray-800,
+.dark .auth-shell .text-gray-700,
+.dark .auth-shell .text-slate-900,
+.dark .auth-shell .text-slate-800,
+.dark .auth-shell .text-slate-700 {
+  color: #f8fafc !important;
+}
+
+.dark .auth-shell .text-gray-600,
+.dark .auth-shell .text-gray-500,
+.dark .auth-shell .text-gray-400,
+.dark .auth-shell .text-slate-600,
+.dark .auth-shell .text-slate-500,
+.dark .auth-shell .text-slate-400,
+.dark .auth-shell .text-muted-foreground {
+  color: #cbd5e1 !important;
+}
+
+.dark .auth-shell .text-red-600,
+.dark .auth-shell .text-red-700,
+.dark .auth-shell .text-red-800 {
+  color: #fca5a5 !important;
+}
+
+.dark .auth-shell .text-green-600,
+.dark .auth-shell .text-green-700,
+.dark .auth-shell .text-green-800 {
+  color: #86efac !important;
+}
+
+.dark .auth-shell .text-yellow-600,
+.dark .auth-shell .text-yellow-700,
+.dark .auth-shell .text-yellow-800 {
+  color: #fde68a !important;
+}
+
+.dark .auth-shell .text-blue-600,
+.dark .auth-shell .text-blue-700,
+.dark .auth-shell .text-blue-800 {
+  color: #93c5fd !important;
+}
+
+.dark .auth-shell .border-gray-100,
+.dark .auth-shell .border-gray-200,
+.dark .auth-shell .border-gray-300,
+.dark .auth-shell .border-slate-200,
+.dark .auth-shell .border-slate-300 {
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+.dark .auth-shell .border-red-100,
+.dark .auth-shell .border-red-200,
+.dark .auth-shell .border-red-300 {
+  border-color: rgba(248, 113, 113, 0.36) !important;
+}
+
+.dark .auth-shell .border-green-100,
+.dark .auth-shell .border-green-200,
+.dark .auth-shell .border-green-300 {
+  border-color: rgba(74, 222, 128, 0.34) !important;
+}
+
+.dark .auth-shell .border-yellow-100,
+.dark .auth-shell .border-yellow-200,
+.dark .auth-shell .border-yellow-300 {
+  border-color: rgba(250, 204, 21, 0.34) !important;
+}
+
+.dark .auth-shell .border-blue-100,
+.dark .auth-shell .border-blue-200,
+.dark .auth-shell .border-blue-300 {
+  border-color: rgba(96, 165, 250, 0.34) !important;
+}
+
+.dark .auth-shell :is(input, select, textarea) {
+  border-color: rgba(148, 163, 184, 0.28) !important;
+  background-color: rgba(2, 6, 23, 0.72) !important;
+  color: #f8fafc !important;
+}
+
+.dark .auth-shell :is(input, select, textarea)::placeholder {
+  color: #94a3b8 !important;
+}
+
+.dark .auth-shell :is(input, select, textarea):focus {
+  border-color: rgba(248, 113, 113, 0.72) !important;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.16);
+  outline: none;
+}
+
+.dark .auth-shell select option {
+  background-color: #0f172a;
+  color: #f8fafc;
+}
+
+.dark .auth-shell [data-slot="tabs-list"] {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background-color: rgba(2, 6, 23, 0.72) !important;
+  color: #cbd5e1 !important;
+}
+
+.dark .auth-shell [data-slot="tabs-trigger"][data-state="active"] {
+  background-color: rgba(127, 29, 29, 0.76) !important;
+  color: #ffffff !important;
+  border-color: rgba(248, 113, 113, 0.36) !important;
+}
+
+.dark .auth-shell .shadow-sm,
+.dark .auth-shell .shadow,
+.dark .auth-shell .shadow-md {
+  box-shadow: 0 14px 32px rgba(2, 6, 23, 0.34) !important;
+}
+
+.dark .auth-shell .hover\:bg-gray-50:hover,
+.dark .auth-shell .hover\:bg-gray-100:hover {
+  background-color: rgba(51, 65, 85, 0.92) !important;
+}
+
+.dark .auth-shell .hover\:bg-red-50:hover,
+.dark .auth-shell .hover\:bg-red-100:hover {
+  background-color: rgba(153, 27, 27, 0.42) !important;
+}
+
+.dark .auth-shell .hover\:bg-green-50:hover,
+.dark .auth-shell .hover\:bg-green-100:hover {
+  background-color: rgba(22, 101, 52, 0.42) !important;
+}
+
+.dark .auth-shell .hover\:bg-yellow-50:hover,
+.dark .auth-shell .hover\:bg-yellow-100:hover {
+  background-color: rgba(133, 77, 14, 0.42) !important;
+}
+
+.dark .auth-shell .hover\:bg-blue-50:hover,
+.dark .auth-shell .hover\:bg-blue-100:hover {
+  background-color: rgba(30, 64, 175, 0.42) !important;
+}
+
+.dark .auth-shell table,
+.dark .auth-shell thead,
+.dark .auth-shell tbody,
+.dark .auth-shell tr,
+.dark .auth-shell th,
+.dark .auth-shell td {
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}

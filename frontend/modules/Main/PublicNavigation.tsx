@@ -53,7 +53,8 @@ export function PublicNavigation() {
             onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             className="rounded-xl border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
           >
-            {resolvedTheme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            <Sun className="hidden size-4 dark:block" />
+            <Moon className="size-4 dark:hidden" />
           </Button>
 
           {navItems.map((item) => (

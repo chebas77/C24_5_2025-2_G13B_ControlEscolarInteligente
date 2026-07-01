@@ -533,7 +533,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="auth-shell min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -669,12 +669,10 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
                   absent: calendarDates.absent,
                 }}
                 modifiersClassNames={{
-                  selected: !selectedDateRecord ? 'bg-gray-400 text-white hover:bg-gray-400 ring-1 ring-gray-400 ring-offset-1' : ''
-                }}
-                modifiersStyles={{
-                  present: { backgroundColor: '#dcfce7', color: '#166534' },
-                  late: { backgroundColor: '#fef3c7', color: '#92400e' },
-                  absent: { backgroundColor: '#fee2e2', color: '#991b1b' },
+                  selected: !selectedDateRecord ? 'bg-gray-400 text-white hover:bg-gray-400 ring-1 ring-gray-400 ring-offset-1 dark:bg-slate-600 dark:ring-slate-500' : '',
+                  present: 'bg-green-100 text-green-800 hover:bg-green-200 dark:bg-green-950/70 dark:text-green-200 dark:hover:bg-green-900/80',
+                  late: 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-950/70 dark:text-yellow-200 dark:hover:bg-yellow-900/80',
+                  absent: 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-950/70 dark:text-red-200 dark:hover:bg-red-900/80',
                 }}
               />
               
@@ -1085,7 +1083,7 @@ export function ParentView({ userEmail, onLogout }: ParentViewProps) {
 
       {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="auth-shell max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />

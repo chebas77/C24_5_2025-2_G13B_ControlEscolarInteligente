@@ -18,18 +18,28 @@ export function ProtectedModule({ allowedRole, children }: ProtectedModuleProps)
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
-    const storedSession = authStorage.load();
-    setSession(storedSession);
-    setIsCheckingSession(false);
+    let isActive = true;
 
-    if (!storedSession) {
-      router.replace("/login");
-      return;
-    }
+    queueMicrotask(() => {
+      if (!isActive) return;
 
-    if (storedSession.role !== allowedRole) {
-      router.replace(routeResolver.resolveHomeByRole(storedSession.role));
-    }
+      const storedSession = authStorage.load();
+      setSession(storedSession);
+      setIsCheckingSession(false);
+
+      if (!storedSession) {
+        router.replace("/login");
+        return;
+      }
+
+      if (storedSession.role !== allowedRole) {
+        router.replace(routeResolver.resolveHomeByRole(storedSession.role));
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
   }, [allowedRole, authStorage, routeResolver, router]);
 
   const handleLogout = () => {
@@ -39,7 +49,7 @@ export function ProtectedModule({ allowedRole, children }: ProtectedModuleProps)
 
   if (isCheckingSession || !session || session.role !== allowedRole) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="auth-shell min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600 mx-auto" />
           <p className="mt-4 text-gray-600">Validando sesión...</p>
