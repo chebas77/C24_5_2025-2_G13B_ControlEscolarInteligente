@@ -1,14 +1,19 @@
 from django.db import migrations, models
 
 
-def is_sql_server(schema_editor):
+def _vendor(schema_editor):
     engine = (schema_editor.connection.settings_dict.get("ENGINE") or "").lower()
     vendor = (schema_editor.connection.vendor or "").lower()
-    return "mssql" in engine or "sql_server" in engine or vendor in {"mssql", "microsoft"}
+    if "mssql" in engine or "sql_server" in engine or vendor in {"mssql", "microsoft"}:
+        return "mssql"
+    if vendor == "postgresql":
+        return "postgresql"
+    return vendor  # mysql, sqlite, etc.
 
 
 def add_fields(apps, schema_editor):
     connection = schema_editor.connection
+    db = _vendor(schema_editor)
 
     with connection.cursor() as cursor:
         alumno_columns = {column.name for column in connection.introspection.get_table_description(cursor, "notificacion_padre")}
@@ -25,8 +30,10 @@ def add_fields(apps, schema_editor):
     if "fecha_evento" not in alumno_columns:
         schema_editor.execute("ALTER TABLE notificacion_padre ADD fecha_evento DATE NULL")
     if "fecha_envio" not in alumno_columns:
-        if is_sql_server(schema_editor):
+        if db == "mssql":
             schema_editor.execute("ALTER TABLE notificacion_padre ADD fecha_envio DATETIME2 NULL")
+        elif db == "postgresql":
+            schema_editor.execute("ALTER TABLE notificacion_padre ADD fecha_envio TIMESTAMP WITH TIME ZONE NULL")
         else:
             schema_editor.execute("ALTER TABLE notificacion_padre ADD fecha_envio DATETIME NULL")
     if "intentos" not in alumno_columns:
@@ -42,10 +49,10 @@ def add_fields(apps, schema_editor):
     ]
     for field_name in preference_flags:
         if field_name not in preferencias_columns:
-            if is_sql_server(schema_editor):
+            if db == "mssql":
                 schema_editor.execute(f"ALTER TABLE preferencias_padre ADD {field_name} BIT NOT NULL DEFAULT 1")
             else:
-                schema_editor.execute(f"ALTER TABLE preferencias_padre ADD {field_name} BOOLEAN NOT NULL DEFAULT 1")
+                schema_editor.execute(f"ALTER TABLE preferencias_padre ADD {field_name} BOOLEAN NOT NULL DEFAULT TRUE")
 
 
 def remove_fields(apps, schema_editor):
