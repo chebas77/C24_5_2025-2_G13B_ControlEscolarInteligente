@@ -1,0 +1,61 @@
+{
+  "family": "scei-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/scei-backend:latest",
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "DB_ENGINE",       "value": "postgresql" },
+        { "name": "DB_PORT",         "value": "5432" },
+        { "name": "DB_SSLMODE",      "value": "require" },
+        { "name": "DEBUG",           "value": "False" },
+        { "name": "EMAIL_BACKEND",   "value": "django.core.mail.backends.smtp.EmailBackend" },
+        { "name": "EMAIL_HOST",      "value": "email-smtp.us-east-1.amazonaws.com" },
+        { "name": "EMAIL_PORT",      "value": "587" },
+        { "name": "EMAIL_USE_TLS",   "value": "True" }
+      ],
+      "secrets": [
+        { "name": "SECRET_KEY",          "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:SECRET_KEY::" },
+        { "name": "DB_NAME",             "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:DB_NAME::" },
+        { "name": "DB_USER",             "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:DB_USER::" },
+        { "name": "DB_PASSWORD",         "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:DB_PASSWORD::" },
+        { "name": "DB_HOST",             "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:DB_HOST::" },
+        { "name": "REDIS_HOST",          "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:REDIS_HOST::" },
+        { "name": "ALLOWED_HOSTS",       "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:ALLOWED_HOSTS::" },
+        { "name": "EMAIL_HOST_USER",     "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:EMAIL_HOST_USER::" },
+        { "name": "EMAIL_HOST_PASSWORD", "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:EMAIL_HOST_PASSWORD::" },
+        { "name": "TWILIO_ACCOUNT_SID",  "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:TWILIO_ACCOUNT_SID::" },
+        { "name": "TWILIO_AUTH_TOKEN",   "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:TWILIO_AUTH_TOKEN::" },
+        { "name": "TWILIO_FROM_NUMBER",  "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:TWILIO_FROM_NUMBER::" },
+        { "name": "GOOGLE_CLIENT_ID",    "valueFrom": "arn:aws:secretsmanager:us-east-1:ACCOUNT_ID:secret:scei/backend:GOOGLE_CLIENT_ID::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/scei-backend",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/api/attendance/ || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}
