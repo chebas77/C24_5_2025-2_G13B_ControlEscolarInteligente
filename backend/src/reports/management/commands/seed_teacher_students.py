@@ -149,42 +149,26 @@ class Command(BaseCommand):
         if reset:
             self._log("Limpiando datos de seed_teacher_students...")
             self._reset_seed_data()
-            self._log("Datos anteriores eliminados.")
 
-        self._log("Creando roles...")
         roles = self._ensure_roles()
-        self._log(f"  {len(roles)} roles listos.")
-
-        self._log("Creando profesores...")
-        teachers = []
-        for config in TEACHER_CONFIGS:
-            teacher = self._ensure_teacher(config, roles["Profesor"])
-            self._log(f"  Profesor: {config['email']} ({config['salon_asignado']})")
-            teachers.append(teacher)
+        teachers = [self._ensure_teacher(config, roles["Profesor"]) for config in TEACHER_CONFIGS]
 
         created_students: list[Alumno] = []
         for teacher_index, teacher in enumerate(teachers):
             teacher_count = self._count_for_teacher(count, teacher_index)
-            config = TEACHER_CONFIGS[teacher_index]
-            self._log(f"Creando {teacher_count} alumnos para {config['email']}...")
-            students = self._ensure_students_for_teacher(
-                teacher=teacher,
-                config=config,
-                role=roles["Alumno"],
-                count=teacher_count,
+            created_students.extend(
+                self._ensure_students_for_teacher(
+                    teacher=teacher,
+                    config=TEACHER_CONFIGS[teacher_index],
+                    role=roles["Alumno"],
+                    count=teacher_count,
+                )
             )
-            self._log(f"  {len(students)} alumnos listos.")
-            created_students.extend(students)
 
-        self._log(f"Generando asistencia para los ultimos {days} dias (esto puede tardar)...")
         self._ensure_attendance(teachers, days)
-        self._log("  Asistencia generada.")
-
-        self._log(f"Generando metricas faciales para {len(created_students)} alumnos...")
         self._ensure_student_metrics(created_students)
-        self._log("  Metricas generadas.")
 
-        self.stdout.write(self.style.SUCCESS("\nSeed de alumnos por profesor completado."))
+        self.stdout.write(self.style.SUCCESS("Seed de alumnos por profesor completado."))
         for teacher in teachers:
             classroom = (teacher.salon_asignado or "").strip()
             classroom_count = Alumno.objects.filter(
@@ -192,10 +176,10 @@ class Command(BaseCommand):
                 seccion=classroom.split("-", 1)[1],
             ).count()
             self.stdout.write(
-                f"  {teacher.email} ({classroom}): {classroom_count} alumnos en el panel."
+                f"{teacher.email} ({classroom}): {classroom_count} alumnos visibles en el panel."
             )
-        self.stdout.write(f"  Asistencias variadas: ultimos {days} dias.")
-        self.stdout.write("  Password demo: DemoSCEI2026!")
+        self.stdout.write(f"Asistencias variadas generadas para los ultimos {days} dias.")
+        self.stdout.write("Password demo para usuarios auth creados: DemoSCEI2026!")
 
     def _reset_seed_data(self) -> None:
         seed_students = Alumno.objects.filter(codigo_alumno__startswith="ALU-T")
@@ -376,11 +360,8 @@ class Command(BaseCommand):
                     estado="activo",
                 ).order_by("apellido_paterno", "apellido_materno", "nombre")
             )
-            self._log(f"  [{classroom}] {len(classroom_students)} alumnos, {days} dias...")
 
             for day_offset in range(days):
-                if day_offset % 10 == 0:
-                    self._log(f"    dia {day_offset + 1}/{days}...")
                 attendance_date = date.today() - timedelta(days=day_offset)
                 attendance, _ = Asistencia.objects.update_or_create(
                     fk_personal=teacher,
